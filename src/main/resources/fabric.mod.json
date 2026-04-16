@@ -1,43 +1,30 @@
 {
-	"schemaVersion": 1,
-	"id": "examplemod",
-	"version": "${version}",
-	"name": "Example Mod",
-	"description": "This mod aims to help new BTA modders.",
-	"authors": [
-		"Turnip Labs"
-	],
-	"contact": {
-		"homepage": "",
-		"sources": ""
-	},
-	"icon": "icon.png",
-	"license": "CC0-1.0",
-	"environment": "*",
-	"entrypoints": {
-		"main": [
-			"turniplabs.examplemod.ExampleMod"
-		],
-		"beforeGameStart": [
-			"turniplabs.examplemod.ExampleMod"
-		],
-		"afterGameStart": [
-			"turniplabs.examplemod.ExampleMod"
-		],
-		"recipesReady": [
-			"turniplabs.examplemod.ExampleMod"
-		]
-	},
-	"mixins": [
-		"examplemod.mixins.json"
-	],
-	"depends": {
-		"fabricloader": ">=${fabricloader}",
-		"halplibe": ">=${halplibe}",
-		"minecraft": "*",
-		"java": ">=${java}"
-	},
-	"suggests": {
-		"modmenu": ">=${modmenu}"
-	}
+  "schemaVersion": 1,
+  "id": "blueprints",
+  "version": "1.0-7.3_04",
+  "name": "Blueprints BTA",
+  "description": "Design your builds in survival, with holograms!",
+  "authors": [
+    "Biscuitius"
+  ],
+  "contact": {
+    "homepage": "",
+    "sources": ""
+  },
+  "icon": "icon.png",
+  "license": "MIT license",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "biscuitius.blueprints.client.BlueprintsClientMod"
+    ]
+  },
+  "mixins": [
+    "blueprints.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": "\u003e\u003d0.18.4-bta.10",
+    "minecraft": "*",
+    "java": "\u003e\u003d8"
+  }
 }
