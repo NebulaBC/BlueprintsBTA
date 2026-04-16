@@ -1,0 +1,8 @@
+key.blueprints.design_mode=Toggle Design Mode
+key.blueprints.design_tools=Design Tools
+key.blueprints.shuffle=Toggle Shuffle
+blueprints.design_mode.enabled=Entered Design Mode
+blueprints.design_mode.disabled=Exited Design Mode
+blueprints.shuffle.enabled=Shuffle enabled
+blueprints.shuffle.disabled=Shuffle disabled
+gui.options.page.controls.category.blueprints=Blueprints Mod
