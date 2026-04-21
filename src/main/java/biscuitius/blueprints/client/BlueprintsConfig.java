@@ -37,6 +37,10 @@ public final class BlueprintsConfig {
                if (root.has("hologramSaturation")) {
                   GhostBlockState.setHologramSaturation(root.get("hologramSaturation").getAsFloat());
                }
+
+               if (root.has("hologramPassthrough")) {
+                  DesignModeState.setPassthroughMode(root.get("hologramPassthrough").getAsBoolean());
+               }
             } catch (Exception var15) {
                LOGGER.warn("Failed to load config from {}: {}", file.getPath(), var15.getMessage());
             }
@@ -66,6 +70,7 @@ public final class BlueprintsConfig {
             root.addProperty("hologramHue", GhostBlockState.getHologramHue());
             root.addProperty("hologramOpacity", GhostBlockState.getHologramOpacity());
             root.addProperty("hologramSaturation", GhostBlockState.getHologramSaturation());
+            root.addProperty("hologramPassthrough", DesignModeState.isPassthroughMode());
 
             try (Writer writer = new BufferedWriter(new FileWriter(file))) {
                writer.write("{\n");

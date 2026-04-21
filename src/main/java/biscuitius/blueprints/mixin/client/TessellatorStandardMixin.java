@@ -14,6 +14,8 @@ public abstract class TessellatorStandardMixin {
 
    @ModifyVariable(method = "setLightmapCoord", at = @At("HEAD"), argsOnly = true)
    private int blueprints$ghostFullBrightLightmap(int lightmapCoord) {
-      return GhostBlockState.isRenderingGhostBlock() && !GhostBlockState.isRenderingWrongBlock() ? 15728880 : lightmapCoord;
+      return GhostBlockState.isRenderingGhostBlock() && !GhostBlockState.isRenderingWrongBlock() && !GhostBlockState.isRenderingReplaceableWrongBlock()
+         ? 15728880
+         : lightmapCoord;
    }
 }

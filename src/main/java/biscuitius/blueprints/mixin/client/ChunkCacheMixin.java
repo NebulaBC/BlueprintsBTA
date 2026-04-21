@@ -21,10 +21,20 @@ public abstract class ChunkCacheMixin {
    @Inject(method = "isBlockOpaqueCube", at = @At("HEAD"), cancellable = true)
    private void blueprints$ghostNotOpaque(int x, int y, int z, CallbackInfoReturnable<Boolean> cir) {
       if (GhostBlockState.hasSectionGhosts(this.worldObj, x, y, z)) {
-         if (GhostBlockState.isGhostBlock(this.worldObj, x, y, z) && !GhostBlockState.isRenderingGhostBlock()) {
-            int originalId = GhostBlockState.getServerBlockId(this.worldObj, x, y, z);
-            Block<?> block = Blocks.blocksList[originalId];
-            cir.setReturnValue(block != null && block.isSolidRender());
+         if (GhostBlockState.isGhostBlock(this.worldObj, x, y, z)) {
+            if (GhostBlockState.isRenderingGhostBlock() && !GhostBlockState.isRenderingWrongBlock()) {
+               int ghostId = this.worldObj.getBlockId(x, y, z);
+               Block<?> ghostBlock = Blocks.blocksList[ghostId];
+               cir.setReturnValue(ghostBlock != null && ghostBlock.isSolidRender());
+            } else {
+               int ghostId = this.worldObj.getBlockId(x, y, z);
+               Block<?> ghostBlock = Blocks.blocksList[ghostId];
+               boolean ghostOpaque = ghostBlock != null && ghostBlock.isSolidRender();
+               int serverId = GhostBlockState.getServerBlockId(this.worldObj, x, y, z);
+               Block<?> serverBlock = serverId > 0 ? Blocks.blocksList[serverId] : null;
+               boolean serverOpaque = serverBlock != null && serverBlock.isSolidRender();
+               cir.setReturnValue(ghostOpaque && serverOpaque);
+            }
          }
       }
    }

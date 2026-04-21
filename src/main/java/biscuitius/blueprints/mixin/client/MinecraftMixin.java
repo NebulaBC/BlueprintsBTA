@@ -46,11 +46,13 @@ public abstract class MinecraftMixin {
    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IZ)V"))
    private void blueprints$routeKeyEventsToDesignPlayer(PlayerInput input, int keyCode, boolean pressed) {
       Minecraft minecraft = (Minecraft)(Object)this;
-      PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
-      if (DesignModeState.isActive() && controlPlayer != null && controlPlayer.input != null) {
-         controlPlayer.input.keyEvent(keyCode, pressed);
-      } else {
-         input.keyEvent(keyCode, pressed);
+      if (!DesignModeState.isActive() || minecraft.currentScreen == null) {
+         PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
+         if (DesignModeState.isActive() && controlPlayer != null && controlPlayer.input != null) {
+            controlPlayer.input.keyEvent(keyCode, pressed);
+         } else {
+            input.keyEvent(keyCode, pressed);
+         }
       }
    }
 

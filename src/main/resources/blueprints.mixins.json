@@ -40,6 +40,15 @@
     "TileEntityRenderDispatcherMixin",
     "TileEntityRendererSignMixin",
     "ScreenSignEditorMixin",
-    "PlayerLocalMixin"
+    "PlayerLocalMixin",
+    "MenuInventoryCreativeMixin",
+    "BlockMixin",
+    "ExplosionMixin",
+    "EntityItemMixin",
+    "RenderBlockCacheMixin",
+    "BlockLogicSandMixin",
+    "BlockLogicMudMixin",
+    "EntityFallingBlockMixin",
+    "MinecraftAccessor"
   ]
 }
