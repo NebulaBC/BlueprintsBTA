@@ -14,6 +14,7 @@ public final class ScreenDesignTools extends Screen {
    private static final int ID_OPACITY = 4;
    private static final int ID_SATURATION = 5;
    private static final int ID_SHUFFLE = 6;
+   private static final int ID_INTERACTION = 7;
    private static final int ID_MOVE_UP = 10;
    private static final int ID_MOVE_DOWN = 11;
    private static final int ID_MOVE_NORTH = 12;
@@ -37,7 +38,7 @@ public final class ScreenDesignTools extends Screen {
    public void init() {
       int cx = this.width / 2;
       boolean inDesignMode = DesignModeState.isActive();
-      int rowCount = 8;
+      int rowCount = 9;
       if (!inDesignMode) {
          rowCount++;
       }
@@ -90,6 +91,9 @@ public final class ScreenDesignTools extends Screen {
          top += 24;
       }
 
+      this.buttons
+         .add(new ButtonElement(7, cx - 100, top, 200, 20, DesignModeState.isPassthroughMode() ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill"));
+      top += 24;
       this.moveSubtitleY = top + 6;
       top += 24;
       int leftCol = cx - 100;
@@ -121,6 +125,9 @@ public final class ScreenDesignTools extends Screen {
       } else if (button.id == 6) {
          DesignModeState.toggleShuffle(mc);
          button.displayString = DesignModeState.isShuffleEnabled() ? "Shuffle Hotbar: ON" : "Shuffle Hotbar: OFF";
+      } else if (button.id == 7) {
+         DesignModeState.toggleInteractionMode(mc);
+         button.displayString = DesignModeState.isPassthroughMode() ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill";
       } else if (button.id >= 10 && button.id <= 15 && mc != null && mc.currentWorld != null) {
          int dx = 0;
          int dy = 0;

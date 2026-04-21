@@ -10,6 +10,7 @@ import net.minecraft.client.net.handler.PacketHandlerClient;
 import net.minecraft.client.player.controller.PlayerControllerMP;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.block.BlockLogicSign;
+import net.minecraft.core.block.Blocks;
 import net.minecraft.core.block.entity.TileEntity;
 import net.minecraft.core.block.entity.TileEntitySign;
 import net.minecraft.core.entity.player.Player;
@@ -41,7 +42,10 @@ public abstract class PlayerControllerMPMixin {
          cir.setReturnValue(false);
       } else {
          Minecraft minecraft = Minecraft.getMinecraft();
-         if (minecraft != null && minecraft.currentWorld != null && GhostBlockState.isGhostBlock(minecraft.currentWorld, x, y, z)) {
+         if (minecraft != null
+            && minecraft.currentWorld != null
+            && !DesignModeState.isPassthroughMode()
+            && GhostBlockState.isGhostBlock(minecraft.currentWorld, x, y, z)) {
             cir.setReturnValue(false);
          }
       }
@@ -60,18 +64,30 @@ public abstract class PlayerControllerMPMixin {
       double yPlaced,
       CallbackInfoReturnable<Boolean> cir
    ) {
-      if (!DesignModeState.isActive() && world != null) {
-         if (GhostBlockState.isGhostBlock(world, blockX, blockY, blockZ)) {
+      if (!DesignModeState.isActive() && !DesignModeState.isPassthroughMode() && world != null) {
+         if (!GhostBlockState.isFulfillmentInProgress() && !GhostBlockState.isFulfillableGhost(world, blockX, blockY, blockZ)) {
+            int tx = blockX + side.getOffsetX();
+            int ty = blockY + side.getOffsetY();
+            int tz = blockZ + side.getOffsetZ();
+            if (GhostBlockState.isFulfillableGhost(world, tx, ty, tz)) {
+               this.blueprints$fulfillAtReplaceable(player, world, itemstack, tx, ty, tz, side, xPlaced, yPlaced, cir);
+            } else {
+               if (GhostBlockState.isGhostBlock(world, tx, ty, tz)) {
+                  cir.setReturnValue(false);
+               }
+            }
+         } else if (!GhostBlockState.isFulfillmentInProgress()) {
             if (itemstack == null) {
                cir.setReturnValue(false);
             } else if (!GhostBlockState.hasRealAdjacentBlock(world, blockX, blockY, blockZ)) {
                cir.setReturnValue(false);
             } else {
-               Block<?> ghostBlock = world.getBlock(blockX, blockY, blockZ);
+               int ghostBlockId = GhostBlockState.getGhostBlockId(world, blockX, blockY, blockZ);
+               Block<?> ghostBlock = Blocks.blocksList[ghostBlockId];
                if (ghostBlock == null) {
                   cir.setReturnValue(false);
                } else {
-                  int ghostMeta = world.getBlockMetadata(blockX, blockY, blockZ);
+                  int ghostMeta = GhostBlockState.getGhostMetadata(world, blockX, blockY, blockZ);
                   ItemStack[] pickResult = ghostBlock.getBreakResult(world, EnumDropCause.PICK_BLOCK, blockX, blockY, blockZ, ghostMeta, null);
                   if (pickResult != null && pickResult.length != 0 && pickResult[0] != null) {
                      ItemStack pickItem = pickResult[0];
@@ -91,6 +107,84 @@ public abstract class PlayerControllerMPMixin {
                      cir.setReturnValue(false);
                   }
                }
+            }
+         }
+      }
+   }
+
+   @Unique
+   private void blueprints$fulfillAtReplaceable(
+      Player player,
+      World world,
+      ItemStack itemstack,
+      int ghostX,
+      int ghostY,
+      int ghostZ,
+      Side side,
+      double xPlaced,
+      double yPlaced,
+      CallbackInfoReturnable<Boolean> cir
+   ) {
+      if (itemstack == null) {
+         cir.setReturnValue(false);
+      } else if (!GhostBlockState.hasRealAdjacentBlock(world, ghostX, ghostY, ghostZ)) {
+         cir.setReturnValue(false);
+      } else {
+         int ghostBlockId = GhostBlockState.getGhostBlockId(world, ghostX, ghostY, ghostZ);
+         Block<?> ghostBlock = Blocks.blocksList[ghostBlockId];
+         if (ghostBlock == null) {
+            cir.setReturnValue(false);
+         } else {
+            int ghostMeta = GhostBlockState.getGhostMetadata(world, ghostX, ghostY, ghostZ);
+            ItemStack[] pickResult = ghostBlock.getBreakResult(world, EnumDropCause.PICK_BLOCK, ghostX, ghostY, ghostZ, ghostMeta, null);
+            if (pickResult != null && pickResult.length != 0 && pickResult[0] != null) {
+               ItemStack pickItem = pickResult[0];
+               if (itemstack.itemID != pickItem.itemID || itemstack.getMetadata() != pickItem.getMetadata()) {
+                  cir.setReturnValue(false);
+               } else if (ghostBlock.getLogic() instanceof BlockLogicSign) {
+                  this.blueprints$fulfillSign(player, world, itemstack, ghostX, ghostY, ghostZ, ghostMeta, ghostBlock, xPlaced, yPlaced, cir);
+               } else {
+                  int ghostId = GhostBlockState.getGhostBlockId(world, ghostX, ghostY, ghostZ);
+                  int ghostMetadata = GhostBlockState.getGhostMetadata(world, ghostX, ghostY, ghostZ);
+                  GhostBlockState.setPendingFulfillment(ghostX, ghostY, ghostZ, ghostId, ghostMetadata);
+                  GhostBlockState.setFulfillmentInProgress(true);
+                  GhostBlockState.revertToServer(world, ghostX, ghostY, ghostZ);
+                  BlueprintsCacheManager.markDirty();
+                  Minecraft mc = Minecraft.getMinecraft();
+                  boolean result = false;
+                  if (mc != null && mc.playerController != null) {
+                     result = mc.playerController.placeItemStackOnTile(player, world, itemstack, ghostX, ghostY, ghostZ, side, xPlaced, yPlaced);
+                  }
+
+                  int[] pending = GhostBlockState.consumePendingFulfillment();
+                  if (pending != null) {
+                     int px = pending[0];
+                     int py = pending[1];
+                     int pz = pending[2];
+                     int desiredId = pending[3];
+                     int desiredMeta = pending[4];
+                     int currentId = world.getBlockId(px, py, pz);
+                     if (result && currentId == desiredId) {
+                        int currentMeta = world.getBlockMetadata(px, py, pz);
+                        if (currentMeta != desiredMeta) {
+                           GhostBlockState.setBlockNoLighting(world, px, py, pz, desiredId, desiredMeta);
+                           world.markBlocksDirty(px, py, pz, px, py, pz);
+                        }
+
+                        GhostBlockState.registerRecentFulfillment(px, py, pz, desiredId, desiredMeta);
+                        GhostBlockState.trackFulfilled(world, px, py, pz, desiredId, desiredMeta, desiredId, desiredMeta);
+                        BlueprintsCacheManager.markDirty();
+                     } else {
+                        GhostBlockState.restoreGhost(world, px, py, pz, desiredId, desiredMeta);
+                        BlueprintsCacheManager.markDirty();
+                     }
+                  }
+
+                  GhostBlockState.setFulfillmentInProgress(false);
+                  cir.setReturnValue(result);
+               }
+            } else {
+               cir.setReturnValue(false);
             }
          }
       }
@@ -194,6 +288,8 @@ public abstract class PlayerControllerMPMixin {
                }
 
                GhostBlockState.registerRecentFulfillment(px, py, pz, desiredId, desiredMeta);
+               GhostBlockState.trackFulfilled(world, px, py, pz, desiredId, desiredMeta, desiredId, desiredMeta);
+               BlueprintsCacheManager.markDirty();
                if (hadCachedText) {
                   this.blueprints$applySignText(world, mc, px, py, pz, cachedText);
                }
@@ -288,6 +384,8 @@ public abstract class PlayerControllerMPMixin {
                }
 
                GhostBlockState.registerRecentFulfillment(px, py, pz, desiredId, desiredMeta);
+               GhostBlockState.trackFulfilled(world, px, py, pz, desiredId, desiredMeta, desiredId, desiredMeta);
+               BlueprintsCacheManager.markDirty();
             } else {
                GhostBlockState.restoreGhost(world, px, py, pz, desiredId, desiredMeta);
                BlueprintsCacheManager.markDirty();
@@ -300,7 +398,7 @@ public abstract class PlayerControllerMPMixin {
       GhostBlockState.setSuppressLighting(false);
    }
 
-   @Inject(method = "placeItemStackOnTile", at = @At("HEAD"))
+   @Inject(method = "placeItemStackOnTile", at = @At("HEAD"), cancellable = true)
    private void blueprints$captureGhostPlace(
       Player player,
       World world,
@@ -316,6 +414,15 @@ public abstract class PlayerControllerMPMixin {
       Minecraft minecraft = Minecraft.getMinecraft();
       if (DesignModeState.isActive() && minecraft != null && player == DesignModeState.getControlPlayer(minecraft)) {
          GhostBlockState.setSuppressLighting(true);
+      }
+
+      if (!DesignModeState.isActive() && !DesignModeState.isPassthroughMode() && !GhostBlockState.isFulfillmentInProgress() && world != null) {
+         int tx = blockX + side.getOffsetX();
+         int ty = blockY + side.getOffsetY();
+         int tz = blockZ + side.getOffsetZ();
+         if (GhostBlockState.isGhostBlock(world, tx, ty, tz) || GhostBlockState.isGhostBlock(world, blockX, blockY, blockZ)) {
+            cir.setReturnValue(false);
+         }
       }
    }
 
@@ -369,6 +476,13 @@ public abstract class PlayerControllerMPMixin {
    private void blueprints$skipControllerPacket(PacketHandlerClient handler, Packet packet) {
       if (!DesignModeState.isActive()) {
          handler.addToSendQueue(packet);
+      }
+   }
+
+   @Inject(method = "useItemStackOnNothing", at = @At("HEAD"), cancellable = true)
+   private void blueprints$cancelMPUseOnNothing(Player player, World world, ItemStack itemstack, CallbackInfoReturnable<Boolean> cir) {
+      if (DesignModeState.isActive()) {
+         cir.setReturnValue(false);
       }
    }
 }

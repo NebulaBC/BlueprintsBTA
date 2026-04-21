@@ -19,7 +19,7 @@ public abstract class WorldClientMPMixin {
       at = @At(value = "INVOKE", target = "Ljava/util/LinkedList;add(Ljava/lang/Object;)Z")
    )
    private boolean blueprints$skipTemporaryBlockHistory(LinkedList<Object> list, Object entry) {
-      return !DesignModeState.isActive() && !GhostBlockState.isFulfillmentInProgress() && list.add(entry);
+      return !DesignModeState.isActive() && !GhostBlockState.isFulfillmentInProgress() ? list.add(entry) : false;
    }
 
    @Inject(method = "setBlockAndMetadata", at = @At("HEAD"))
@@ -91,6 +91,7 @@ public abstract class WorldClientMPMixin {
       if (desired != null && id == desired[0] && meta != desired[1]) {
          World world = (World)(Object)this;
          GhostBlockState.setBlockNoLighting(world, x, y, z, id, desired[1]);
+         GhostBlockState.updateServer(world, x, y, z, id, desired[1]);
          world.markBlocksDirty(x, y, z, x, y, z);
       }
    }

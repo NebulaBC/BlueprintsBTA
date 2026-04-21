@@ -10,8 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import net.minecraft.client.render.block.model.BlockModel;
+import net.minecraft.client.render.block.model.BlockModelDispatcher;
 import net.minecraft.core.block.Block;
+import net.minecraft.core.block.BlockLogic;
+import net.minecraft.core.block.BlockLogicBed;
+import net.minecraft.core.block.BlockLogicDoor;
 import net.minecraft.core.block.Blocks;
+import net.minecraft.core.enums.LightLayer;
+import net.minecraft.core.util.helper.Side;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.chunk.Chunk;
 import net.minecraft.core.world.chunk.ChunkSection;
@@ -21,6 +28,7 @@ public final class GhostBlockState {
    private static int physicsDepth;
    private static final List<int[]> patchedPositions = new ArrayList<>();
    private static boolean suppressLighting;
+   private static boolean suppressEntitySpawn;
    private static int lightPatchDepth;
    private static final List<int[]> lightPatchedPositions = new ArrayList<>();
    private static World chunkRebuildWorld;
@@ -30,6 +38,7 @@ public final class GhostBlockState {
    private static int ghostRenderMode;
    private static int lastBlockGhostMode;
    private static boolean lastBlockNonSolid;
+   private static boolean wrongBlockOverlay;
    private static final Map<World, Set<Long>> GHOST_SECTIONS = new IdentityHashMap<>();
    private static final Map<World, Map<Long, int[]>> SECTION_COUNTS = new IdentityHashMap<>();
    private static boolean hidden;
@@ -150,14 +159,23 @@ public final class GhostBlockState {
       } else {
          int mode = getGhostRenderModeInternal(chunkRebuildWorld, lastBlockX, lastBlockY, lastBlockZ);
          lastBlockGhostMode = mode;
-         if (mode != 1) {
-            lastBlockNonSolid = false;
-            return false;
-         } else {
+         if (mode == 1) {
             int id = chunkRebuildWorld.getBlockId(lastBlockX, lastBlockY, lastBlockZ);
             Block<?> block = Blocks.blocksList[id];
-            lastBlockNonSolid = block != null && !block.isSolidRender();
-            return !lastBlockNonSolid && cachedA < 255;
+            boolean nativelyTranslucent = false;
+            if (block != null) {
+               BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
+               nativelyTranslucent = model != null && model.renderLayer() == 1;
+            }
+
+            lastBlockNonSolid = nativelyTranslucent;
+            return !nativelyTranslucent && cachedA < 255;
+         } else if (mode == 3) {
+            lastBlockNonSolid = false;
+            return cachedA < 255;
+         } else {
+            lastBlockNonSolid = false;
+            return false;
          }
       }
    }
@@ -176,6 +194,18 @@ public final class GhostBlockState {
 
    public static boolean isRenderingWrongBlock() {
       return ghostRenderMode == 2;
+   }
+
+   public static boolean isRenderingReplaceableWrongBlock() {
+      return ghostRenderMode == 3;
+   }
+
+   public static boolean isWrongBlockOverlay() {
+      return wrongBlockOverlay;
+   }
+
+   public static void setWrongBlockOverlay(boolean v) {
+      wrongBlockOverlay = v;
    }
 
    public static void setGhostRenderMode(int mode) {
@@ -200,7 +230,7 @@ public final class GhostBlockState {
                   GhostBlockState.BlockState state = entry.getValue();
                   if (hide) {
                      setBlockNoLighting(world, px, py, pz, state.serverBlockId, state.serverMetadata);
-                  } else if (py <= layerCutoffY) {
+                  } else if (py <= layerCutoffY && state.serverBlockId == 0) {
                      setBlockNoLighting(world, px, py, pz, state.ghostBlockId, state.ghostMetadata);
                   }
 
@@ -277,8 +307,8 @@ public final class GhostBlockState {
                int pz = unpackZ(packed);
                GhostBlockState.BlockState state = entry.getValue();
                boolean shouldBeVisible = py <= newCutoff;
-               int wantedId = shouldBeVisible ? state.ghostBlockId : state.serverBlockId;
-               int wantedMeta = shouldBeVisible ? state.ghostMetadata : state.serverMetadata;
+               int wantedId = shouldBeVisible && state.serverBlockId == 0 ? state.ghostBlockId : state.serverBlockId;
+               int wantedMeta = shouldBeVisible && state.serverBlockId == 0 ? state.ghostMetadata : state.serverMetadata;
                int currentId = world.getBlockId(px, py, pz);
                int currentMeta = world.getBlockMetadata(px, py, pz);
                if (currentId != wantedId || currentMeta != wantedMeta) {
@@ -389,6 +419,14 @@ public final class GhostBlockState {
       suppressLighting = suppress;
    }
 
+   public static boolean isSuppressingEntitySpawn() {
+      return suppressEntitySpawn;
+   }
+
+   public static void setSuppressEntitySpawn(boolean suppress) {
+      suppressEntitySpawn = suppress;
+   }
+
    public static void setBlockNoLighting(World world, int x, int y, int z, int id, int meta) {
       if (y >= 0 && y < 256) {
          Chunk chunk = world.getChunkFromBlockCoords(x, z);
@@ -447,6 +485,39 @@ public final class GhostBlockState {
             GhostBlockState.BlockState state = worldBlocks.get(key);
             if (state != null) {
                worldBlocks.put(key, new GhostBlockState.BlockState(newServerId, newServerMeta, state.ghostBlockId, state.ghostMetadata));
+            }
+         }
+      }
+   }
+
+   public static boolean handleTrackedBlockChange(World world, int x, int y, int z, int newId, int newMeta) {
+      if (world == null) {
+         return false;
+      } else {
+         Map<Long, GhostBlockState.BlockState> worldBlocks = BLOCKS_BY_WORLD.get(world);
+         if (worldBlocks == null) {
+            return false;
+         } else {
+            long key = packPos(x, y, z);
+            GhostBlockState.BlockState state = worldBlocks.get(key);
+            if (state == null) {
+               return false;
+            } else {
+               worldBlocks.put(key, new GhostBlockState.BlockState(newId, newMeta, state.ghostBlockId, state.ghostMetadata));
+               if (newId == 0 && !hidden && y <= layerCutoffY) {
+                  setBlockNoLighting(world, x, y, z, state.ghostBlockId, state.ghostMetadata);
+                  world.scheduleLightingUpdate(LightLayer.Sky, x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+                  world.scheduleLightingUpdate(LightLayer.Block, x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
+                  world.markBlocksDirty(x, y, z, x, y, z);
+                  return true;
+               } else {
+                  if (newId != 0) {
+                     setBlockNoLighting(world, x, y, z, newId, newMeta);
+                  }
+
+                  world.markBlocksDirty(x, y, z, x, y, z);
+                  return false;
+               }
             }
          }
       }
@@ -524,6 +595,10 @@ public final class GhostBlockState {
                   }
                } else {
                   worldBlocks.put(key, new GhostBlockState.BlockState(state.serverBlockId, state.serverMetadata, currentId, currentMeta));
+                  if (state.serverBlockId != 0 && !DesignModeState.isActive()) {
+                     setBlockNoLighting(world, x, y, z, state.serverBlockId, state.serverMetadata);
+                  }
+
                   if (DesignModeState.isActive() && !layerAtMax) {
                      int oldCutoff = layerCutoffY;
                      layerAtMax = true;
@@ -562,6 +637,31 @@ public final class GhostBlockState {
       }
    }
 
+   public static boolean isFulfillableGhost(World world, int x, int y, int z) {
+      if (isGhostBlock(world, x, y, z)) {
+         return true;
+      } else if (hidden || world == null || y > layerCutoffY) {
+         return false;
+      } else if (!hasSectionGhosts(world, x, y, z)) {
+         return false;
+      } else {
+         Map<Long, GhostBlockState.BlockState> worldBlocks = BLOCKS_BY_WORLD.get(world);
+         if (worldBlocks == null) {
+            return false;
+         } else {
+            GhostBlockState.BlockState state = worldBlocks.get(packPos(x, y, z));
+            if (state == null) {
+               return false;
+            } else if (state.serverBlockId != 0 && (state.serverBlockId != state.ghostBlockId || state.serverMetadata != state.ghostMetadata)) {
+               Block<?> serverBlock = Blocks.blocksList[state.serverBlockId];
+               return serverBlock != null && serverBlock.getMaterial().isReplaceable();
+            } else {
+               return false;
+            }
+         }
+      }
+   }
+
    public static int getGhostRenderMode(World world, int x, int y, int z) {
       return !hasSectionGhosts(world, x, y, z) ? 0 : getGhostRenderModeInternal(world, x, y, z);
    }
@@ -581,7 +681,12 @@ public final class GhostBlockState {
                if (currentId != state.ghostBlockId
                   || currentMeta != state.ghostMetadata
                   || currentId == state.serverBlockId && currentMeta == state.serverMetadata) {
-                  return state.serverBlockId == 0 || state.serverBlockId == state.ghostBlockId && state.serverMetadata == state.ghostMetadata ? 0 : 2;
+                  if (state.serverBlockId != 0 && (state.serverBlockId != state.ghostBlockId || state.serverMetadata != state.ghostMetadata)) {
+                     Block<?> serverBlock = Blocks.blocksList[state.serverBlockId];
+                     return serverBlock != null && serverBlock.getMaterial().isReplaceable() ? 3 : 2;
+                  } else {
+                     return 0;
+                  }
                } else {
                   return 1;
                }
@@ -689,6 +794,32 @@ public final class GhostBlockState {
       }
    }
 
+   public static void revertMultiPart(World world, int x, int y, int z) {
+      if (world != null) {
+         int blockId = world.getBlockId(x, y, z);
+         Block<?> block = Blocks.blocksList[blockId];
+         if (block != null) {
+            BlockLogic logic = block.getLogic();
+            if (logic instanceof BlockLogicDoor) {
+               BlockLogicDoor doorLogic = (BlockLogicDoor)logic;
+               int otherY = doorLogic.isTop ? y - 1 : y + 1;
+               revertToServer(world, x, otherY, z);
+            } else if (logic instanceof BlockLogicBed) {
+               int meta = world.getBlockMetadata(x, y, z);
+               int dir = BlockLogicBed.getDirection(meta);
+               Side[] map = BlockLogicBed.headBlockToFootBlockMap;
+               if (BlockLogicBed.isBlockFootOfBed(meta)) {
+                  revertToServer(world, x - map[dir].getOffsetX(), y, z - map[dir].getOffsetZ());
+               } else {
+                  revertToServer(world, x + map[dir].getOffsetX(), y, z + map[dir].getOffsetZ());
+               }
+            }
+         }
+
+         revertToServer(world, x, y, z);
+      }
+   }
+
    public static void clear() {
       BLOCKS_BY_WORLD.clear();
       GHOST_SECTIONS.clear();
@@ -783,7 +914,10 @@ public final class GhostBlockState {
                long key = packPos(nx, ny, nz);
                worldBlocks.put(key, new GhostBlockState.BlockState(serverId, serverMeta, ghostId, ghostMeta));
                addSectionEntry(world, nx, ny, nz);
-               setBlockNoLighting(world, nx, ny, nz, ghostId, ghostMeta);
+               if (serverId == 0) {
+                  setBlockNoLighting(world, nx, ny, nz, ghostId, ghostMeta);
+               }
+
                world.markBlocksDirty(nx, ny, nz, nx, ny, nz);
             }
 
@@ -805,6 +939,28 @@ public final class GhostBlockState {
                int py = unpackY(packed);
                int pz = unpackZ(packed);
                world.markBlocksDirty(px, py, pz, px, py, pz);
+            }
+         }
+      }
+   }
+
+   public static void swapGhostChunkData(World world, boolean enteringDesignMode) {
+      if (world != null) {
+         Map<Long, GhostBlockState.BlockState> worldBlocks = BLOCKS_BY_WORLD.get(world);
+         if (worldBlocks != null && !worldBlocks.isEmpty()) {
+            for (Entry<Long, GhostBlockState.BlockState> entry : worldBlocks.entrySet()) {
+               GhostBlockState.BlockState state = entry.getValue();
+               if (state.serverBlockId != 0) {
+                  long packed = entry.getKey();
+                  int px = unpackX(packed);
+                  int py = unpackY(packed);
+                  int pz = unpackZ(packed);
+                  if (enteringDesignMode) {
+                     setBlockNoLighting(world, px, py, pz, state.ghostBlockId, state.ghostMetadata);
+                  } else {
+                     setBlockNoLighting(world, px, py, pz, state.serverBlockId, state.serverMetadata);
+                  }
+               }
             }
          }
       }
@@ -847,6 +1003,15 @@ public final class GhostBlockState {
 
    public static void registerRecentFulfillment(int x, int y, int z, int blockId, int meta) {
       recentFulfillments.put(packPos(x, y, z), new int[]{blockId, meta, 100});
+   }
+
+   public static void trackFulfilled(World world, int x, int y, int z, int serverBlockId, int serverMeta, int ghostBlockId, int ghostMeta) {
+      if (world != null) {
+         Map<Long, GhostBlockState.BlockState> worldBlocks = BLOCKS_BY_WORLD.computeIfAbsent(world, w -> new HashMap<>());
+         long key = packPos(x, y, z);
+         worldBlocks.put(key, new GhostBlockState.BlockState(serverBlockId, serverMeta, ghostBlockId, ghostMeta));
+         addSectionEntry(world, x, y, z);
+      }
    }
 
    public static void restoreGhost(World world, int x, int y, int z, int ghostId, int ghostMeta) {

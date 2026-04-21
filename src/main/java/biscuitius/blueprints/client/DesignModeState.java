@@ -1,5 +1,6 @@
 package biscuitius.blueprints.client;
 
+import biscuitius.blueprints.mixin.client.MinecraftAccessor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -23,8 +24,10 @@ public final class DesignModeState {
    public static final KeyBinding TOGGLE_KEY = new KeyBinding("key.blueprints.design_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_V);
    public static final KeyBinding TOOLS_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
    public static final KeyBinding SHUFFLE_KEY = new KeyBinding("key.blueprints.shuffle").setDefault(InputDevice.keyboard, Keyboard.KEY_H);
-   private static boolean active;
+   public static final KeyBinding INTERACTION_KEY = new KeyBinding("key.blueprints.interaction_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_X);
+   private static volatile boolean active;
    private static boolean shuffleEnabled;
+   private static boolean passthroughMode;
    private static final Random shuffleRandom = new Random();
    private static PlayerLocal realPlayer;
    private static PlayerLocal designPlayer;
@@ -73,6 +76,20 @@ public final class DesignModeState {
 
    public static boolean isShuffleEnabled() {
       return shuffleEnabled;
+   }
+
+   public static boolean isPassthroughMode() {
+      return passthroughMode;
+   }
+
+   public static void setPassthroughMode(boolean value) {
+      passthroughMode = value;
+   }
+
+   public static void toggleInteractionMode(Minecraft minecraft) {
+      passthroughMode = !passthroughMode;
+      BlueprintsConfig.save();
+      showInteractionModeMessage(minecraft);
    }
 
    public static void toggleShuffle(Minecraft minecraft) {
@@ -133,6 +150,7 @@ public final class DesignModeState {
 
    public static void tickDesignPlayer(Minecraft minecraft) {
       if (active && minecraft != null && designPlayer != null) {
+         designPlayer.syncPlacementMode();
          designPlayer.tick();
       }
    }
@@ -147,6 +165,10 @@ public final class DesignModeState {
       } else {
          if (active && SHUFFLE_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
             toggleShuffle(minecraft);
+         }
+
+         if (INTERACTION_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
+            toggleInteractionMode(minecraft);
          }
       }
    }
@@ -167,6 +189,7 @@ public final class DesignModeState {
             copyPlayerState(realPlayer, designPlayer);
             designPlayer.setGamemode(Gamemode.creative);
             designPlayer.setNoclip(true);
+            designPlayer.syncPlacementMode();
             designPlayer.removed = false;
          } else {
             designPlayer = createDesignPlayer(minecraft, realPlayer, designPlayer);
@@ -177,6 +200,7 @@ public final class DesignModeState {
          clearMovement(realPlayer);
          clearMovement(designPlayer);
          minecraft.gameSettings.thirdPersonView.value = 0;
+         GhostBlockState.swapGhostChunkData(minecraft.currentWorld, true);
          GhostBlockState.markAllDirty(minecraft.currentWorld);
          attachDesignCamera(minecraft);
          showStatusMessage(minecraft, true);
@@ -186,11 +210,20 @@ public final class DesignModeState {
    private static void exitDesignMode(Minecraft minecraft) {
       active = false;
       if (minecraft != null && minecraft.currentWorld != null) {
+         GhostBlockState.swapGhostChunkData(minecraft.currentWorld, false);
          GhostBlockState.markAllDirty(minecraft.currentWorld);
       }
 
       if (realPlayer != null) {
          realPlayer.removed = false;
+         if (!realPlayer.getGamemode().canPlayerFly()) {
+            realPlayer.setNoclip(false);
+         }
+
+         if (minecraft != null) {
+            ((MinecraftAccessor)minecraft).setToggleFlyPressed(false);
+         }
+
          if (minecraft != null) {
             attachRealPlayerCamera(minecraft);
             if (minecraft.currentScreen instanceof ScreenContainerAbstract
@@ -277,6 +310,7 @@ public final class DesignModeState {
 
       ghost.setGamemode(Gamemode.creative);
       ghost.setNoclip(true);
+      ghost.syncPlacementMode();
       return ghost;
    }
 
@@ -315,6 +349,15 @@ public final class DesignModeState {
             ? i18n.translateKey(shuffleEnabled ? "blueprints.shuffle.enabled" : "blueprints.shuffle.disabled")
             : (shuffleEnabled ? "Shuffle enabled" : "Shuffle disabled");
          DesignModeOverlay.show(message, shuffleEnabled ? 5635925 : 16733525);
+      }
+   }
+
+   private static void showInteractionModeMessage(Minecraft minecraft) {
+      if (minecraft != null) {
+         I18n i18n = I18n.getInstance();
+         String key = passthroughMode ? "blueprints.interaction_mode.passthrough" : "blueprints.interaction_mode.fulfill";
+         String message = i18n != null ? i18n.translateKey(key) : (passthroughMode ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill");
+         DesignModeOverlay.show(message, passthroughMode ? 16762880 : 5635925);
       }
    }
 }
