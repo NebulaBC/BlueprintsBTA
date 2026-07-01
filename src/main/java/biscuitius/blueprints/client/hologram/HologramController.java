@@ -152,7 +152,7 @@ public final class HologramController {
                ItemStack[] pick;
                try {
                   pick = block.getBreakResult(mc.currentWorld, EnumDropCause.PICK_BLOCK, hx, hy, hz, h.metadata, null);
-               } catch (Throwable var21) {
+               } catch (Throwable var22) {
                   pick = null;
                }
 
@@ -175,7 +175,12 @@ public final class HologramController {
                                        player, held, mc.currentWorld, nx, ny, nz, s, hx, hy, hz, h.metadata
                                     );
                                     if (forced != null) {
-                                       return placeWithRotation(mc, player, held, nx, ny, nz, s, forced.xHit, forced.yHit, forced.yaw, forced.pitch);
+                                       boolean placed = placeWithRotation(mc, player, held, nx, ny, nz, s, forced.xHit, forced.yHit, forced.yaw, forced.pitch);
+                                       if (placed) {
+                                          HologramStore.remove(mc.currentWorld, hx, hy, hz);
+                                       }
+
+                                       return placed;
                                     }
                                  }
                               }

@@ -41,6 +41,7 @@ public final class HologramRenderer implements HologramListener {
    private final Map<World, Map<Long, HologramRenderer.Section>> sections = new IdentityHashMap<>();
    private final Map<World, Map<Long, TileEntity>> dummyTileEntities = new IdentityHashMap<>();
    private final Deque<HologramRenderer.Section> dirtyQueue = new ArrayDeque<>();
+   private final List<Object[]> pendingFulfilledRemovals = new ArrayList<>();
 
    private HologramRenderer() {
    }
@@ -361,7 +362,7 @@ public final class HologramRenderer implements HologramListener {
                            }
 
                            te = (TileEntity)supplied;
-                        } catch (Throwable var19) {
+                        } catch (Throwable var25) {
                            continue;
                         }
 
@@ -377,7 +378,14 @@ public final class HologramRenderer implements HologramListener {
             }
 
             if (dispatcher.hasRenderer(te)) {
-               dispatcher.renderTileEntity(tess, dispatcher.camera, te, partialTick);
+               HologramPlacementContext.begin(world);
+
+               try {
+                  dispatcher.renderTileEntity(tess, dispatcher.camera, te, partialTick);
+               } catch (Throwable var23) {
+               } finally {
+                  HologramPlacementContext.end();
+               }
             }
          }
       }
@@ -637,6 +645,15 @@ public final class HologramRenderer implements HologramListener {
                freeDisplayLists(s);
             }
          }
+
+         if (!this.pendingFulfilledRemovals.isEmpty()) {
+            Object[][] snap = this.pendingFulfilledRemovals.toArray(new Object[0][]);
+            this.pendingFulfilledRemovals.clear();
+
+            for (Object[] e : snap) {
+               HologramStore.remove((World)e[0], (Integer)e[1], (Integer)e[2], (Integer)e[3]);
+            }
+         }
       }
    }
 
@@ -662,6 +679,7 @@ public final class HologramRenderer implements HologramListener {
          BlockModel.setRenderBlocks(renderBlocks);
          allocDisplayLists(s);
          List<long[]> entries = new ArrayList<>();
+         List<long[]> toRemoveAfter = null;
          int maxBaseX = baseX + 16;
          int maxBaseY = Math.min(256, baseY + 16);
          int maxBaseZ = baseZ + 16;
@@ -680,6 +698,11 @@ public final class HologramRenderer implements HologramListener {
                   mode = 0;
                } else if (realId == h.blockId && realMeta == h.metadata) {
                   mode = 3;
+                  if (toRemoveAfter == null) {
+                     toRemoveAfter = new ArrayList<>();
+                  }
+
+                  toRemoveAfter.add(new long[]{x, y, z});
                } else {
                   Block<?> realBlock = realId < Blocks.blocksList.length ? Blocks.blocksList[realId] : null;
                   boolean replaceable = realBlock != null && realBlock.getMaterial().isReplaceable();
@@ -731,18 +754,18 @@ public final class HologramRenderer implements HologramListener {
             BlockModel.setRenderBlocks(previousRenderBlocks);
          }
 
-         boolean var36 = false;
+         boolean var37 = false;
 
          for (long[] entryx : entries) {
             int mode = (int)entryx[5];
             if (mode == 1 || mode == 2) {
-               var36 = true;
+               var37 = true;
                break;
             }
          }
 
          GL11.glNewList(s.firstDisplayList + 2, 4864);
-         if (var36) {
+         if (var37) {
             ChunkCache realCache = new ChunkCache(s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16);
             RenderBlocks realRender = new RenderBlocks(realCache);
             RenderBlocks save = BlockModel.renderBlocks;
@@ -779,7 +802,12 @@ public final class HologramRenderer implements HologramListener {
          }
 
          GL11.glEndList();
-         s.emptyPass[2] = !var36;
+         s.emptyPass[2] = !var37;
+         if (toRemoveAfter != null) {
+            for (long[] pos : toRemoveAfter) {
+               this.pendingFulfilledRemovals.add(new Object[]{s.world, (int)pos[0], (int)pos[1], (int)pos[2]});
+            }
+         }
       }
    }
 

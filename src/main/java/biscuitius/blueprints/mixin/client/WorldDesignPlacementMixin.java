@@ -75,6 +75,110 @@ public abstract class WorldDesignPlacementMixin {
       }
    }
 
+   @Inject(method = "setBlockMetadata", at = @At("HEAD"), cancellable = true)
+   private void blueprints$captureSetMetaRaw(int x, int y, int z, int meta, CallbackInfoReturnable<Boolean> cir) {
+      World self = (World)(Object)this;
+      if (HologramPlacementContext.isActive(self)) {
+         if (HologramPlacementContext.isDryRun(self)) {
+            int[] existing = HologramPlacementContext.captureRead(x, y, z);
+            int id = existing != null ? existing[0] : 0;
+            HologramPlacementContext.captureWrite(x, y, z, id, meta);
+            cir.setReturnValue(true);
+         } else {
+            HologramBlock current = HologramStore.get(self, x, y, z);
+            if (current != null) {
+               HologramStore.put(self, x, y, z, current.withMetadata(meta));
+            }
+
+            cir.setReturnValue(true);
+         }
+      }
+   }
+
+   @Inject(method = "setBlockAndMetadata", at = @At("HEAD"), cancellable = true)
+   private void blueprints$captureSetBlockAndMetaRaw(int x, int y, int z, int id, int meta, CallbackInfoReturnable<Boolean> cir) {
+      World self = (World)(Object)this;
+      if (HologramPlacementContext.isActive(self)) {
+         if (HologramPlacementContext.isDryRun(self)) {
+            HologramPlacementContext.captureWrite(x, y, z, id, meta);
+            cir.setReturnValue(id != 0);
+         } else {
+            if (id == 0) {
+               HologramStore.remove(self, x, y, z);
+            } else {
+               HologramStore.put(self, x, y, z, new HologramBlock(id, meta));
+            }
+
+            cir.setReturnValue(true);
+         }
+      }
+   }
+
+   @Inject(method = "setBlockAndMetadataRaw", at = @At("HEAD"), cancellable = true)
+   private void blueprints$captureSetBlockAndMetaRawer(int x, int y, int z, int id, int meta, CallbackInfoReturnable<Boolean> cir) {
+      World self = (World)(Object)this;
+      if (HologramPlacementContext.isActive(self)) {
+         if (HologramPlacementContext.isDryRun(self)) {
+            HologramPlacementContext.captureWrite(x, y, z, id, meta);
+            cir.setReturnValue(id != 0);
+         } else {
+            if (id == 0) {
+               HologramStore.remove(self, x, y, z);
+            } else {
+               HologramStore.put(self, x, y, z, new HologramBlock(id, meta));
+            }
+
+            cir.setReturnValue(true);
+         }
+      }
+   }
+
+   @Inject(method = "setBlock", at = @At("HEAD"), cancellable = true)
+   private void blueprints$captureSetBlockRaw(int x, int y, int z, int id, CallbackInfoReturnable<Boolean> cir) {
+      World self = (World)(Object)this;
+      if (HologramPlacementContext.isActive(self)) {
+         if (HologramPlacementContext.isDryRun(self)) {
+            int[] existing = HologramPlacementContext.captureRead(x, y, z);
+            int meta = existing != null ? existing[1] : 0;
+            HologramPlacementContext.captureWrite(x, y, z, id, meta);
+            cir.setReturnValue(id != 0);
+         } else {
+            if (id == 0) {
+               HologramStore.remove(self, x, y, z);
+            } else {
+               HologramBlock prev = HologramStore.get(self, x, y, z);
+               int meta = prev != null ? prev.metadata : 0;
+               HologramStore.put(self, x, y, z, new HologramBlock(id, meta));
+            }
+
+            cir.setReturnValue(true);
+         }
+      }
+   }
+
+   @Inject(method = "setBlockRaw", at = @At("HEAD"), cancellable = true)
+   private void blueprints$captureSetBlockRawer(int x, int y, int z, int id, CallbackInfoReturnable<Boolean> cir) {
+      World self = (World)(Object)this;
+      if (HologramPlacementContext.isActive(self)) {
+         if (HologramPlacementContext.isDryRun(self)) {
+            int[] existing = HologramPlacementContext.captureRead(x, y, z);
+            int meta = existing != null ? existing[1] : 0;
+            HologramPlacementContext.captureWrite(x, y, z, id, meta);
+            cir.setReturnValue(id != 0);
+         } else {
+            if (id == 0) {
+               HologramStore.remove(self, x, y, z);
+            } else {
+               HologramBlock prev = HologramStore.get(self, x, y, z);
+               int meta = prev != null ? prev.metadata : 0;
+               HologramStore.put(self, x, y, z, new HologramBlock(id, meta));
+            }
+
+            cir.setReturnValue(true);
+         }
+      }
+   }
+
    @Inject(method = "getBlockId", at = @At("HEAD"), cancellable = true)
    private void blueprints$readBlockId(int x, int y, int z, CallbackInfoReturnable<Integer> cir) {
       if (HologramPlacementContext.isActive()) {
