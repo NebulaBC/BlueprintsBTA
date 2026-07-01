@@ -1,10 +1,16 @@
 package biscuitius.blueprints.client;
 
+import biscuitius.blueprints.client.hologram.BlueprintTransform;
+import biscuitius.blueprints.client.hologram.HologramAppearance;
+import biscuitius.blueprints.client.hologram.HologramRenderer;
+import biscuitius.blueprints.client.hologram.HologramStore;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.entity.player.PlayerLocal;
 import net.minecraft.client.gui.ButtonElement;
 import net.minecraft.client.gui.Screen;
 import net.minecraft.client.gui.SliderElement;
 import net.minecraft.client.input.InputDevice;
+import net.minecraft.core.world.World;
 
 public final class ScreenDesignTools extends Screen {
    private static final int ID_CLEAR = 0;
@@ -15,16 +21,23 @@ public final class ScreenDesignTools extends Screen {
    private static final int ID_SATURATION = 5;
    private static final int ID_SHUFFLE = 6;
    private static final int ID_INTERACTION = 7;
+   private static final int ID_SAVE = 8;
+   private static final int ID_LOAD = 9;
    private static final int ID_MOVE_UP = 10;
    private static final int ID_MOVE_DOWN = 11;
-   private static final int ID_MOVE_NORTH = 12;
-   private static final int ID_MOVE_SOUTH = 13;
-   private static final int ID_MOVE_EAST = 14;
-   private static final int ID_MOVE_WEST = 15;
-   private static final int BTN_WIDTH = 200;
+   private static final int ID_MOVE_FORWARD = 12;
+   private static final int ID_MOVE_BACKWARD = 13;
+   private static final int ID_MOVE_LEFT = 14;
+   private static final int ID_MOVE_RIGHT = 15;
+   private static final int ID_ROTATE_CCW = 16;
+   private static final int ID_ROTATE_CW = 17;
+   private static final int ID_FLIP = 18;
+   private static final int ID_MATERIALS = 19;
+   private static final int BTN_WIDTH = 240;
    private static final int BTN_HEIGHT = 20;
    private static final int GAP = 4;
-   private static final int SMALL_BTN_WIDTH = 64;
+   private static final int SMALL_BTN_WIDTH = 77;
+   private static final int HALF_BTN_WIDTH = 118;
    private SliderElement layersSlider;
    private SliderElement colourSlider;
    private SliderElement opacitySlider;
@@ -33,79 +46,73 @@ public final class ScreenDesignTools extends Screen {
    private float prevOpacity;
    private float prevSaturation;
    private int titleY;
-   private int moveSubtitleY;
+
+   private static int getTotalLayers(World world) {
+      if (world == null) {
+         return 0;
+      } else {
+         int[] range = HologramStore.getYRange(world);
+         return range == null ? 0 : range[1] - range[0] + 1;
+      }
+   }
 
    public void init() {
       int cx = this.width / 2;
-      boolean inDesignMode = DesignModeState.isActive();
-      int rowCount = 9;
-      if (!inDesignMode) {
-         rowCount++;
-      }
-
-      if (inDesignMode) {
-         rowCount++;
-      }
-
+      int rowCount = 8;
       int totalHeight = rowCount * 20 + (rowCount - 1) * 4;
       int top = this.height / 2 - (totalHeight + 12) / 2 + 12;
       this.titleY = top - 12;
-      this.buttons.add(new ButtonElement(0, cx - 100, top, 200, 20, "Clear All Blueprints"));
+      int leftCol = cx - 120;
+      int rightCol = leftCol + 118 + 4;
+      int midCol3 = leftCol + 77 + 4;
+      int rightCol3 = midCol3 + 77 + 4;
+      this.buttons.add(new ButtonElement(0, leftCol, top, 77, 20, "Clear"));
+      this.buttons.add(new ButtonElement(1, midCol3, top, 77, 20, HologramAppearance.isHidden() ? "Show" : "Hide"));
+      this.buttons.add(new ButtonElement(19, rightCol3, top, 77, 20, "Materials"));
       top += 24;
-      if (!inDesignMode) {
-         ButtonElement hideShowButton = new ButtonElement(1, cx - 100, top, 200, 20, GhostBlockState.isHidden() ? "Show Blueprints" : "Hide Blueprints");
-         this.buttons.add(hideShowButton);
-         top += 24;
-      }
-
+      this.buttons.add(new ButtonElement(8, leftCol, top, 118, 20, "Save Blueprint"));
+      this.buttons.add(new ButtonElement(9, rightCol, top, 118, 20, "Load Blueprint"));
+      top += 24;
       Minecraft mc = Minecraft.getMinecraft();
-      int totalLayers = GhostBlockState.getTotalLayers(mc.currentWorld);
+      int totalLayers = getTotalLayers(mc.currentWorld);
       float initialSlider = 1.0F;
-      if (!GhostBlockState.isLayerAtMax() && totalLayers > 1) {
-         int[] range = GhostBlockState.getYRange(mc.currentWorld);
+      if (!HologramAppearance.isLayerAtMax() && totalLayers > 1) {
+         int[] range = HologramStore.getYRange(mc.currentWorld);
          if (range != null) {
-            int currentCutoff = GhostBlockState.getLayerCutoffY();
+            int currentCutoff = HologramAppearance.getLayerCutoffY();
             int currentLayer = Math.min(currentCutoff - range[0] + 1, totalLayers);
             initialSlider = (float)(currentLayer - 1) / (totalLayers - 1);
          }
       }
 
-      String label = totalLayers > 1 && !GhostBlockState.isLayerAtMax() ? "Layers" : "Layer: All";
-      this.layersSlider = new SliderElement(2, cx - 100, top, 200, 20, label, initialSlider);
+      String layerLabel = totalLayers > 1 && !HologramAppearance.isLayerAtMax() ? "Layers" : "Layer: All";
+      this.layersSlider = new SliderElement(2, leftCol, top, 118, 20, layerLabel, initialSlider);
       this.buttons.add(this.layersSlider);
-      top += 24;
-      float hue = GhostBlockState.getHologramHue();
-      this.colourSlider = new SliderElement(3, cx - 100, top, 200, 20, "Hologram Colour: " + Math.round(hue * 360.0F) + "°", hue);
-      this.buttons.add(this.colourSlider);
-      top += 24;
-      float opacity = GhostBlockState.getHologramOpacity();
-      this.opacitySlider = new SliderElement(4, cx - 100, top, 200, 20, "Hologram Opacity: " + Math.round(opacity * 100.0F) + "%", opacity);
+      float opacity = HologramAppearance.getOpacity();
+      this.opacitySlider = new SliderElement(4, rightCol, top, 118, 20, "Opacity: " + Math.round(opacity * 100.0F) + "%", opacity);
       this.buttons.add(this.opacitySlider);
       top += 24;
-      float sat = GhostBlockState.getHologramSaturation();
-      this.saturationSlider = new SliderElement(5, cx - 100, top, 200, 20, "Hologram Saturation: " + Math.round(sat * 100.0F) + "%", sat);
+      float hue = HologramAppearance.getHue();
+      this.colourSlider = new SliderElement(3, leftCol, top, 118, 20, "Colour: " + Math.round(hue * 360.0F) + "°", hue);
+      this.buttons.add(this.colourSlider);
+      float sat = HologramAppearance.getSaturation();
+      this.saturationSlider = new SliderElement(5, rightCol, top, 118, 20, "Saturation: " + Math.round(sat * 100.0F) + "%", sat);
       this.buttons.add(this.saturationSlider);
       top += 24;
-      if (inDesignMode) {
-         this.buttons.add(new ButtonElement(6, cx - 100, top, 200, 20, DesignModeState.isShuffleEnabled() ? "Shuffle Hotbar: ON" : "Shuffle Hotbar: OFF"));
-         top += 24;
-      }
-
-      this.buttons
-         .add(new ButtonElement(7, cx - 100, top, 200, 20, DesignModeState.isPassthroughMode() ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill"));
+      this.buttons.add(new ButtonElement(6, leftCol, top, 118, 20, DesignModeState.isShuffleEnabled() ? "Shuffle: ON" : "Shuffle: OFF"));
+      this.buttons.add(new ButtonElement(7, rightCol, top, 118, 20, DesignModeState.isPassthroughMode() ? "Interact: Passthrough" : "Interact: Fulfill"));
       top += 24;
-      this.moveSubtitleY = top + 6;
+      this.buttons.add(new ButtonElement(11, rightCol3, top, 77, 20, "Down"));
+      this.buttons.add(new ButtonElement(12, midCol3, top, 77, 20, "Forward"));
+      this.buttons.add(new ButtonElement(10, leftCol, top, 77, 20, "Up"));
       top += 24;
-      int leftCol = cx - 100;
-      int midCol = leftCol + 64 + 4;
-      int rightCol = midCol + 64 + 4;
-      this.buttons.add(new ButtonElement(10, leftCol, top, 64, 20, "Up (+Y)"));
-      this.buttons.add(new ButtonElement(12, midCol, top, 64, 20, "North (-Z)"));
-      this.buttons.add(new ButtonElement(14, rightCol, top, 64, 20, "East (+X)"));
+      this.buttons.add(new ButtonElement(14, leftCol, top, 77, 20, "Left"));
+      this.buttons.add(new ButtonElement(13, midCol3, top, 77, 20, "Back"));
+      this.buttons.add(new ButtonElement(15, rightCol3, top, 77, 20, "Right"));
       top += 24;
-      this.buttons.add(new ButtonElement(11, leftCol, top, 64, 20, "Down (-Y)"));
-      this.buttons.add(new ButtonElement(13, midCol, top, 64, 20, "South (+Z)"));
-      this.buttons.add(new ButtonElement(15, rightCol, top, 64, 20, "West (-X)"));
+      this.buttons.add(new ButtonElement(16, leftCol, top, 77, 20, "← Rotate"));
+      this.buttons.add(new ButtonElement(18, midCol3, top, 77, 20, "Flip"));
+      this.buttons.add(new ButtonElement(17, rightCol3, top, 77, 20, "Rotate →"));
       this.prevHue = hue;
       this.prevOpacity = opacity;
       this.prevSaturation = sat;
@@ -115,45 +122,85 @@ public final class ScreenDesignTools extends Screen {
       Minecraft mc = Minecraft.getMinecraft();
       if (button.id == 0) {
          if (mc != null && mc.currentWorld != null) {
-            GhostBlockState.clearAll(mc.currentWorld);
-            BlueprintsCacheManager.markDirty();
+            HologramStore.clearWorld(mc.currentWorld);
          }
+      } else if (button.id == 8) {
+         this.mc.displayScreen(new ScreenBlueprintBrowser(this, ScreenBlueprintBrowser.Mode.SAVE));
+      } else if (button.id == 9) {
+         this.mc.displayScreen(new ScreenBlueprintBrowser(this, ScreenBlueprintBrowser.Mode.LOAD));
       } else if (button.id == 1) {
-         boolean nowHidden = !GhostBlockState.isHidden();
-         GhostBlockState.setHidden(nowHidden, mc != null ? mc.currentWorld : null);
-         button.displayString = nowHidden ? "Show Blueprints" : "Hide Blueprints";
+         boolean nowHidden = !HologramAppearance.isHidden();
+         HologramAppearance.setHidden(nowHidden);
+         button.displayString = nowHidden ? "Show Blueprint" : "Hide Blueprint";
       } else if (button.id == 6) {
          DesignModeState.toggleShuffle(mc);
-         button.displayString = DesignModeState.isShuffleEnabled() ? "Shuffle Hotbar: ON" : "Shuffle Hotbar: OFF";
+         button.displayString = DesignModeState.isShuffleEnabled() ? "Shuffle: ON" : "Shuffle: OFF";
       } else if (button.id == 7) {
          DesignModeState.toggleInteractionMode(mc);
-         button.displayString = DesignModeState.isPassthroughMode() ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill";
+         button.displayString = DesignModeState.isPassthroughMode() ? "Interact: Passthrough" : "Interact: Fulfill";
+      } else if (button.id == 19) {
+         this.mc.displayScreen(new ScreenBlueprintMaterials(this));
+      } else if (button.id == 17) {
+         if (mc != null && mc.currentWorld != null) {
+            BlueprintTransform.rotate(mc.currentWorld, BlueprintTransform.Rotation.CW);
+         }
+      } else if (button.id == 16) {
+         if (mc != null && mc.currentWorld != null) {
+            BlueprintTransform.rotate(mc.currentWorld, BlueprintTransform.Rotation.CCW);
+         }
+      } else if (button.id == 18) {
+         if (mc != null && mc.currentWorld != null) {
+            BlueprintTransform.flip(mc.currentWorld, BlueprintTransform.FlipAxis.X);
+         }
       } else if (button.id >= 10 && button.id <= 15 && mc != null && mc.currentWorld != null) {
          int dx = 0;
          int dy = 0;
          int dz = 0;
-         switch (button.id) {
-            case 10:
-               dy = 1;
-               break;
-            case 11:
-               dy = -1;
-               break;
-            case 12:
-               dz = -1;
-               break;
-            case 13:
-               dz = 1;
-               break;
-            case 14:
-               dx = 1;
-               break;
-            case 15:
-               dx = -1;
+         if (button.id == 10) {
+            dy = 1;
+         } else if (button.id == 11) {
+            dy = -1;
+         } else {
+            int[] fwd = forwardCardinal(mc);
+            int fx = fwd[0];
+            int fz = fwd[1];
+            switch (button.id) {
+               case 12:
+                  dx = fx;
+                  dz = fz;
+                  break;
+               case 13:
+                  dx = -fx;
+                  dz = -fz;
+                  break;
+               case 14:
+                  dx = fz;
+                  dz = -fx;
+                  break;
+               case 15:
+                  dx = -fz;
+                  dz = fx;
+            }
          }
 
-         GhostBlockState.shiftAll(mc.currentWorld, dx, dy, dz);
-         BlueprintsCacheManager.markDirty();
+         HologramStore.shiftAll(mc.currentWorld, dx, dy, dz);
+      }
+   }
+
+   private static int[] forwardCardinal(Minecraft mc) {
+      PlayerLocal player = DesignModeState.getControlPlayer(mc);
+      float yaw = player != null ? player.yRot : 0.0F;
+      yaw = (yaw % 360.0F + 360.0F) % 360.0F;
+      int facing = (int)Math.floor((yaw + 45.0) / 90.0) & 3;
+      switch (facing) {
+         case 0:
+            return new int[]{0, 1};
+         case 1:
+            return new int[]{-1, 0};
+         case 2:
+            return new int[]{0, -1};
+         default:
+            return new int[]{1, 0};
       }
    }
 
@@ -161,12 +208,12 @@ public final class ScreenDesignTools extends Screen {
       Minecraft mc = Minecraft.getMinecraft();
       if (mc != null && mc.currentWorld != null) {
          if (this.layersSlider != null) {
-            int totalLayers = GhostBlockState.getTotalLayers(mc.currentWorld);
+            int totalLayers = getTotalLayers(mc.currentWorld);
             if (totalLayers <= 1) {
                this.layersSlider.displayString = "Layer: All";
-               GhostBlockState.setLayerCount(mc.currentWorld, Integer.MAX_VALUE, true);
+               HologramAppearance.setLayerCount(mc.currentWorld, Integer.MAX_VALUE, true);
             } else {
-               if (GhostBlockState.isLayerAtMax() && !this.layersSlider.dragging) {
+               if (HologramAppearance.isLayerAtMax() && !this.layersSlider.dragging) {
                   this.layersSlider.sliderValue = 1.0;
                }
 
@@ -177,7 +224,7 @@ public final class ScreenDesignTools extends Screen {
 
                boolean atMax = layer >= totalLayers;
                this.layersSlider.displayString = atMax ? "Layer: All" : "Layer: " + layer;
-               GhostBlockState.setLayerCount(mc.currentWorld, atMax ? Integer.MAX_VALUE : layer, atMax);
+               HologramAppearance.setLayerCount(mc.currentWorld, atMax ? Integer.MAX_VALUE : layer, atMax);
             }
          }
 
@@ -185,7 +232,7 @@ public final class ScreenDesignTools extends Screen {
          if (this.colourSlider != null) {
             float hue = (float)this.colourSlider.sliderValue;
             this.colourSlider.displayString = "Colour: " + Math.round(hue * 360.0F) + "°";
-            GhostBlockState.setHologramHue(hue);
+            HologramAppearance.setHue(hue);
             if (hue != this.prevHue) {
                this.prevHue = hue;
                appearanceChanged = true;
@@ -195,7 +242,7 @@ public final class ScreenDesignTools extends Screen {
          if (this.opacitySlider != null) {
             float opacity = (float)this.opacitySlider.sliderValue;
             this.opacitySlider.displayString = "Opacity: " + Math.round(opacity * 100.0F) + "%";
-            GhostBlockState.setHologramOpacity(opacity);
+            HologramAppearance.setOpacity(opacity);
             if (opacity != this.prevOpacity) {
                this.prevOpacity = opacity;
                appearanceChanged = true;
@@ -205,7 +252,7 @@ public final class ScreenDesignTools extends Screen {
          if (this.saturationSlider != null) {
             float sat = (float)this.saturationSlider.sliderValue;
             this.saturationSlider.displayString = "Saturation: " + Math.round(sat * 100.0F) + "%";
-            GhostBlockState.setHologramSaturation(sat);
+            HologramAppearance.setSaturation(sat);
             if (sat != this.prevSaturation) {
                this.prevSaturation = sat;
                appearanceChanged = true;
@@ -213,7 +260,7 @@ public final class ScreenDesignTools extends Screen {
          }
 
          if (appearanceChanged) {
-            GhostBlockState.markAllDirty(mc.currentWorld);
+            HologramRenderer.markAllDirty();
             BlueprintsConfig.save();
          }
       }
@@ -221,13 +268,12 @@ public final class ScreenDesignTools extends Screen {
 
    public void render(int mx, int my, float partialTick) {
       this.renderBackground();
-      this.drawStringCentered(this.font, "Blueprints Utility Menu", this.width / 2, this.titleY, 16777215);
-      this.drawStringCentered(this.font, "Move Blueprints", this.width / 2, this.moveSubtitleY, 11184810);
+      this.drawStringCentered(this.font, "Blueprints Menu", this.width / 2, this.titleY, 16777215);
       super.render(mx, my, partialTick);
    }
 
    public void keyPressed(char eventCharacter, int eventKey, int mx, int my) {
-      if (DesignModeState.TOOLS_KEY.isPressEvent(InputDevice.keyboard)) {
+      if (DesignModeState.MENU_KEY.isPressEvent(InputDevice.keyboard)) {
          this.mc.displayScreen(null);
       } else {
          super.keyPressed(eventCharacter, eventKey, mx, my);

@@ -13,6 +13,7 @@ import net.minecraft.client.render.texture.Texture;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.player.inventory.menu.MenuAbstract;
+import net.minecraft.core.player.inventory.menu.MenuInventoryCreative;
 import net.minecraft.core.player.inventory.slot.Slot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -84,6 +85,10 @@ public abstract class ScreenInventoryCreativeMixin extends ScreenInventory {
       if (DesignModeState.isActive()) {
          ScreenInventoryCreative self = (ScreenInventoryCreative)(Object)this;
          MenuAbstract menu = self.inventorySlots;
+         if (menu instanceof MenuInventoryCreative) {
+            MenuInventoryCreative cm = (MenuInventoryCreative)menu;
+            cm.searchPage(cm.getSearchText());
+         }
 
          for (int i = 0; i < 9; i++) {
             Slot slot = (Slot)menu.slots.get(i);

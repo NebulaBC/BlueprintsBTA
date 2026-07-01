@@ -1,5 +1,7 @@
 package biscuitius.blueprints.client;
 
+import biscuitius.blueprints.client.hologram.HologramCache;
+import biscuitius.blueprints.client.hologram.HologramRenderer;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
@@ -17,6 +19,8 @@ public class BlueprintsClientMod implements ClientModInitializer {
    public void onInitializeClient() {
       loadTranslations();
       BlueprintsConfig.load();
+      HologramRenderer.install();
+      HologramCache.install();
       LOGGER.info("Blueprints client features initialized.");
    }
 

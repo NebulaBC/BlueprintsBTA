@@ -18,9 +18,8 @@ public abstract class OptionsPagesMixin {
             .withComponent(
                new OptionsCategory("gui.options.page.controls.category.blueprints")
                   .withComponent(new KeyBindingComponent(DesignModeState.TOGGLE_KEY))
-                  .withComponent(new KeyBindingComponent(DesignModeState.TOOLS_KEY))
+                  .withComponent(new KeyBindingComponent(DesignModeState.MENU_KEY))
                   .withComponent(new KeyBindingComponent(DesignModeState.SHUFFLE_KEY))
-                  .withComponent(new KeyBindingComponent(DesignModeState.INTERACTION_KEY))
             );
       }
    }

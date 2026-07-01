@@ -1,5 +1,6 @@
 package biscuitius.blueprints.client;
 
+import biscuitius.blueprints.client.hologram.HologramAppearance;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.BufferedReader;
@@ -27,15 +28,15 @@ public final class BlueprintsConfig {
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                JsonObject root = new JsonParser().parse(reader).getAsJsonObject();
                if (root.has("hologramHue")) {
-                  GhostBlockState.setHologramHue(root.get("hologramHue").getAsFloat());
+                  HologramAppearance.setHue(root.get("hologramHue").getAsFloat());
                }
 
                if (root.has("hologramOpacity")) {
-                  GhostBlockState.setHologramOpacity(root.get("hologramOpacity").getAsFloat());
+                  HologramAppearance.setOpacity(root.get("hologramOpacity").getAsFloat());
                }
 
                if (root.has("hologramSaturation")) {
-                  GhostBlockState.setHologramSaturation(root.get("hologramSaturation").getAsFloat());
+                  HologramAppearance.setSaturation(root.get("hologramSaturation").getAsFloat());
                }
 
                if (root.has("hologramPassthrough")) {
@@ -67,9 +68,9 @@ public final class BlueprintsConfig {
                root = new JsonObject();
             }
 
-            root.addProperty("hologramHue", GhostBlockState.getHologramHue());
-            root.addProperty("hologramOpacity", GhostBlockState.getHologramOpacity());
-            root.addProperty("hologramSaturation", GhostBlockState.getHologramSaturation());
+            root.addProperty("hologramHue", HologramAppearance.getHue());
+            root.addProperty("hologramOpacity", HologramAppearance.getOpacity());
+            root.addProperty("hologramSaturation", HologramAppearance.getSaturation());
             root.addProperty("hologramPassthrough", DesignModeState.isPassthroughMode());
 
             try (Writer writer = new BufferedWriter(new FileWriter(file))) {

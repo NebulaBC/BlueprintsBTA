@@ -2,7 +2,6 @@ package biscuitius.blueprints.mixin.client;
 
 import biscuitius.blueprints.client.DesignModeState;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.player.PlayerLocal;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.item.ItemStack;
@@ -16,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class PlayerMixin {
    @Inject(method = "dropPlayerItemWithRandomChoice", at = @At("HEAD"), cancellable = true)
    private void blueprints$cancelDesignPlayerDrop(ItemStack itemStack, boolean random, CallbackInfo ci) {
-      if (DesignModeState.isActive() && (PlayerLocal)(Object)this == DesignModeState.getDesignPlayer()) {
+      if (DesignModeState.isActive() && (Object)this == DesignModeState.getDesignPlayer()) {
          ci.cancel();
       }
    }
@@ -39,7 +38,7 @@ public abstract class PlayerMixin {
 
    @Inject(method = "handlePortal", at = @At("HEAD"), cancellable = true)
    private void blueprints$cancelDesignPlayerPortal(int portalBlockId, DyeColor portalColor, CallbackInfo ci) {
-      if (DesignModeState.isActive() && (Player)(Object)this == DesignModeState.getDesignPlayer()) {
+      if (DesignModeState.isActive() && (Object)this == DesignModeState.getDesignPlayer()) {
          ci.cancel();
       }
    }
@@ -47,7 +46,7 @@ public abstract class PlayerMixin {
    @Inject(method = "collideWithPlayer", at = @At("HEAD"), cancellable = true)
    private void blueprints$cancelItemPickupInDesignMode(Entity entity, CallbackInfo ci) {
       if (DesignModeState.isActive()) {
-         if ((Player)(Object)this != DesignModeState.getDesignPlayer()) {
+         if ((Object)this != DesignModeState.getDesignPlayer()) {
             ci.cancel();
          }
       }

@@ -1,5 +1,7 @@
 package biscuitius.blueprints.client;
 
+import biscuitius.blueprints.client.hologram.HologramAppearance;
+import biscuitius.blueprints.client.hologram.HologramRenderer;
 import biscuitius.blueprints.mixin.client.MinecraftAccessor;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,28 +24,18 @@ import org.lwjgl.input.Keyboard;
 
 public final class DesignModeState {
    public static final KeyBinding TOGGLE_KEY = new KeyBinding("key.blueprints.design_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_V);
-   public static final KeyBinding TOOLS_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
+   public static final KeyBinding MENU_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
    public static final KeyBinding SHUFFLE_KEY = new KeyBinding("key.blueprints.shuffle").setDefault(InputDevice.keyboard, Keyboard.KEY_H);
-   public static final KeyBinding INTERACTION_KEY = new KeyBinding("key.blueprints.interaction_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_X);
    private static volatile boolean active;
    private static boolean shuffleEnabled;
    private static boolean passthroughMode;
    private static final Random shuffleRandom = new Random();
    private static PlayerLocal realPlayer;
    private static PlayerLocal designPlayer;
-   private static boolean designPlayerNoclipOverride;
    private static ItemStack[] pendingMainInventory;
    private static ItemStack[] pendingArmorInventory;
    private static int pendingCurrentItemIndex = -1;
    private static int pendingHotbarOffset;
-
-   public static boolean isDesignPlayerNoclipOverride() {
-      return designPlayerNoclipOverride;
-   }
-
-   public static void setDesignPlayerNoclipOverride(boolean v) {
-      designPlayerNoclipOverride = v;
-   }
 
    private DesignModeState() {
    }
@@ -128,20 +120,19 @@ public final class DesignModeState {
             realPlayer = minecraft.thePlayer;
          }
 
-         GhostBlockState.tickPendingApplication(minecraft.currentWorld);
-         GhostBlockState.tickFulfillments();
-         BlueprintsCacheManager.tickAutoSave(minecraft);
          if (active) {
             if (realPlayer != null) {
                if (realPlayer.getHealth() <= 0) {
                   exitDesignMode(minecraft);
                } else {
                   if (designPlayer == null || designPlayer.world != minecraft.currentWorld) {
-                     GhostBlockState.clear();
                      designPlayer = createDesignPlayer(minecraft, realPlayer, designPlayer);
                   }
 
                   attachDesignCamera(minecraft);
+                  if (realPlayer.input != null) {
+                     realPlayer.input.onGameUnfocused();
+                  }
                }
             }
          }
@@ -165,10 +156,6 @@ public final class DesignModeState {
       } else {
          if (active && SHUFFLE_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
             toggleShuffle(minecraft);
-         }
-
-         if (INTERACTION_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
-            toggleInteractionMode(minecraft);
          }
       }
    }
@@ -196,12 +183,11 @@ public final class DesignModeState {
          }
 
          active = true;
-         GhostBlockState.setHidden(false, minecraft.currentWorld);
+         HologramAppearance.setHidden(false);
          clearMovement(realPlayer);
          clearMovement(designPlayer);
          minecraft.gameSettings.thirdPersonView.value = 0;
-         GhostBlockState.swapGhostChunkData(minecraft.currentWorld, true);
-         GhostBlockState.markAllDirty(minecraft.currentWorld);
+         HologramRenderer.markAllDirty();
          attachDesignCamera(minecraft);
          showStatusMessage(minecraft, true);
       }
@@ -210,8 +196,7 @@ public final class DesignModeState {
    private static void exitDesignMode(Minecraft minecraft) {
       active = false;
       if (minecraft != null && minecraft.currentWorld != null) {
-         GhostBlockState.swapGhostChunkData(minecraft.currentWorld, false);
-         GhostBlockState.markAllDirty(minecraft.currentWorld);
+         HologramRenderer.markAllDirty();
       }
 
       if (realPlayer != null) {
@@ -239,18 +224,21 @@ public final class DesignModeState {
          designPlayer.removed = true;
       }
 
-      BlueprintsCacheManager.markDirty();
       showStatusMessage(minecraft, false);
    }
 
    public static void handleWorldLeave() {
-      if (active) {
+      PrinterMode.disable();
+      if (!active) {
+         BlueprintSelection.clearAll();
+      } else {
          active = false;
          if (designPlayer != null) {
             designPlayer.removed = true;
          }
 
          realPlayer = null;
+         BlueprintSelection.clearAll();
       }
    }
 

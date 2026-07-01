@@ -8,4 +8,16 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface MinecraftAccessor {
    @Accessor("toggleFlyPressed")
    void setToggleFlyPressed(boolean var1);
+
+   @Accessor("mouseTicksRan")
+   void setMouseTicksRan(int var1);
+
+   @Accessor("ticksRan")
+   int getTicksRan();
+
+   @Accessor("serverName")
+   String getServerName();
+
+   @Accessor("serverPort")
+   int getServerPort();
 }
