@@ -17,6 +17,7 @@ import net.minecraft.client.render.TileEntityRenderDispatcher;
 import net.minecraft.client.render.block.model.BlockModel;
 import net.minecraft.client.render.block.model.BlockModelDispatcher;
 import net.minecraft.client.render.tessellator.Tessellator;
+import net.minecraft.client.render.tessellator.TessellatorStandard;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.block.entity.TileEntity;
@@ -24,6 +25,7 @@ import net.minecraft.core.world.World;
 import net.minecraft.core.world.chunk.ChunkCache;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.slf4j.LoggerFactory;
 
 public final class HologramRenderer implements HologramListener {
    public static final int RENDER_PASS_SOLID = 0;
@@ -42,12 +44,95 @@ public final class HologramRenderer implements HologramListener {
    private final Map<World, Map<Long, TileEntity>> dummyTileEntities = new IdentityHashMap<>();
    private final Deque<HologramRenderer.Section> dirtyQueue = new ArrayDeque<>();
    private final List<Object[]> pendingFulfilledRemovals = new ArrayList<>();
+   private static volatile boolean glInfoLogged;
+   private static volatile boolean firstDrawLogged;
+   private static volatile boolean firstRebuildLogged;
 
    private HologramRenderer() {
    }
 
    public static HologramRenderer get() {
       return INSTANCE;
+   }
+
+   private static void logGlInfoOnce() {
+      if (!glInfoLogged) {
+         glInfoLogged = true;
+
+         try {
+            String vendor = GL11.glGetString(7936);
+            String renderer = GL11.glGetString(7937);
+            String version = GL11.glGetString(7938);
+            LoggerFactory.getLogger("blueprints-client")
+               .info("Hologram GL context — vendor='{}' renderer='{}' version='{}'", new Object[]{vendor, renderer, version});
+         } catch (Throwable var3) {
+         }
+      }
+   }
+
+   private static void logFirstDrawOnce(World world, Map<Long, HologramRenderer.Section> worldSections) {
+      if (!firstDrawLogged) {
+         firstDrawLogged = true;
+
+         try {
+            int storeEntries = HologramStore.rawView(world).size();
+            int sectionCount = worldSections.size();
+            int withList = 0;
+            int[] nonEmpty = new int[3];
+
+            for (HologramRenderer.Section s : worldSections.values()) {
+               if (s.firstDisplayList != 0) {
+                  withList++;
+               }
+
+               for (int p = 0; p < 3; p++) {
+                  if (!s.emptyPass[p]) {
+                     nonEmpty[p]++;
+                  }
+               }
+            }
+
+            LoggerFactory.getLogger("blueprints-client")
+               .info(
+                  "First hologram draw — storeEntries={} sections={} sectionsWithList={} nonEmpty[solid={}, translucent={}, wrong={}] designMode={} hidden={} layerCutoffY={}",
+                  new Object[]{
+                     storeEntries,
+                     sectionCount,
+                     withList,
+                     nonEmpty[0],
+                     nonEmpty[1],
+                     nonEmpty[2],
+                     DesignModeState.isActive(),
+                     HologramAppearance.isHidden(),
+                     HologramAppearance.getLayerCutoffY()
+                  }
+               );
+         } catch (Throwable var9) {
+         }
+      }
+   }
+
+   private static void logFirstRebuildOnce(int[] vertsPerPass, boolean[] anyRenderedPerPass) {
+      if (!firstRebuildLogged) {
+         firstRebuildLogged = true;
+
+         try {
+            LoggerFactory.getLogger("blueprints-client")
+               .info(
+                  "First hologram rebuild — verts[solid={}, translucent={}, wrong={}] anyRendered[solid={}, translucent={}, wrong={}] lightmapEnabled={}",
+                  new Object[]{
+                     vertsPerPass[0],
+                     vertsPerPass[1],
+                     vertsPerPass[2],
+                     anyRenderedPerPass[0],
+                     anyRenderedPerPass[1],
+                     anyRenderedPerPass[2],
+                     LightmapHelper.isLightmapEnabled()
+                  }
+               );
+         } catch (Throwable var3) {
+         }
+      }
    }
 
    public static void install() {
@@ -266,6 +351,7 @@ public final class HologramRenderer implements HologramListener {
             Map<Long, HologramRenderer.Section> worldSections = INSTANCE.sections.get(world);
             boolean hasSections = worldSections != null && !worldSections.isEmpty();
             if (hasSections) {
+               logGlInfoOnce();
                if (renderPass == 0) {
                   INSTANCE.flushDirty();
                }
@@ -281,6 +367,9 @@ public final class HologramRenderer implements HologramListener {
 
                GL11.glPushMatrix();
                GL11.glTranslated(-cameraX, -cameraY, -cameraZ);
+               if (renderPass == 0) {
+                  logFirstDrawOnce(world, worldSections);
+               }
 
                for (HologramRenderer.Section s : worldSections.values()) {
                   if (s.firstDisplayList != 0 && !s.emptyPass[renderPass]) {
@@ -713,6 +802,8 @@ public final class HologramRenderer implements HologramListener {
             }
          }
 
+         int[] vertsPerPass = firstRebuildLogged ? null : new int[3];
+         boolean[] anyRenderedPerPass = firstRebuildLogged ? null : new boolean[3];
          Tessellator tess = Tessellator.instance;
          HOLOGRAM_PASS_ACTIVE = true;
 
@@ -745,6 +836,11 @@ public final class HologramRenderer implements HologramListener {
                   }
                }
 
+               if (vertsPerPass != null) {
+                  vertsPerPass[pass] = ((TessellatorStandard)tess).data.vertexCount;
+                  anyRenderedPerPass[pass] = anyRendered;
+               }
+
                tess.draw();
                GL11.glEndList();
                s.emptyPass[pass] = !anyRendered;
@@ -754,18 +850,18 @@ public final class HologramRenderer implements HologramListener {
             BlockModel.setRenderBlocks(previousRenderBlocks);
          }
 
-         boolean var37 = false;
+         boolean var38 = false;
 
          for (long[] entryx : entries) {
             int mode = (int)entryx[5];
             if (mode == 1 || mode == 2) {
-               var37 = true;
+               var38 = true;
                break;
             }
          }
 
          GL11.glNewList(s.firstDisplayList + 2, 4864);
-         if (var37) {
+         if (var38) {
             ChunkCache realCache = new ChunkCache(s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16);
             RenderBlocks realRender = new RenderBlocks(realCache);
             RenderBlocks save = BlockModel.renderBlocks;
@@ -794,6 +890,11 @@ public final class HologramRenderer implements HologramListener {
                   }
                }
 
+               if (vertsPerPass != null) {
+                  vertsPerPass[2] = ((TessellatorStandard)tess).data.vertexCount;
+                  anyRenderedPerPass[2] = true;
+               }
+
                tess.draw();
             } finally {
                WRONG_BLOCK_PASS_ACTIVE = false;
@@ -802,7 +903,11 @@ public final class HologramRenderer implements HologramListener {
          }
 
          GL11.glEndList();
-         s.emptyPass[2] = !var37;
+         s.emptyPass[2] = !var38;
+         if (vertsPerPass != null) {
+            logFirstRebuildOnce(vertsPerPass, anyRenderedPerPass);
+         }
+
          if (toRemoveAfter != null) {
             for (long[] pos : toRemoveAfter) {
                this.pendingFulfilledRemovals.add(new Object[]{s.world, (int)pos[0], (int)pos[1], (int)pos[2]});
