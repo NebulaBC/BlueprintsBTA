@@ -20,6 +20,7 @@ public abstract class OptionsPagesMixin {
                   .withComponent(new KeyBindingComponent(DesignModeState.TOGGLE_KEY))
                   .withComponent(new KeyBindingComponent(DesignModeState.MENU_KEY))
                   .withComponent(new KeyBindingComponent(DesignModeState.SHUFFLE_KEY))
+				  .withComponent(new KeyBindingComponent(DesignModeState.OVERLAY_KEY))
             );
       }
    }

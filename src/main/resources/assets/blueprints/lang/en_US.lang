@@ -1,6 +1,7 @@
 key.blueprints.design_mode=Toggle Design Mode
 key.blueprints.design_tools=Blueprints Menu
 key.blueprints.shuffle=Toggle Shuffle
+key.blueprints.overlay=Toggle Design Visibility
 blueprints.design_mode.enabled=Entered Design Mode
 blueprints.design_mode.disabled=Exited Design Mode
 blueprints.shuffle.enabled=Shuffle enabled

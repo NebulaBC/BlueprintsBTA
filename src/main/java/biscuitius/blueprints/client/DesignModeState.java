@@ -28,6 +28,7 @@ public final class DesignModeState {
    public static final KeyBinding TOGGLE_KEY = new KeyBinding("key.blueprints.design_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_V);
    public static final KeyBinding MENU_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
    public static final KeyBinding SHUFFLE_KEY = new KeyBinding("key.blueprints.shuffle").setDefault(InputDevice.keyboard, Keyboard.KEY_H);
+   public static final KeyBinding OVERLAY_KEY = new KeyBinding("key.blueprints.overlay").setDefault(InputDevice.keyboard, Keyboard.KEY_B);
    private static volatile boolean active;
    private static boolean shuffleEnabled;
    private static boolean passthroughMode;
@@ -157,7 +158,11 @@ public final class DesignModeState {
       } else {
          if (active && SHUFFLE_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
             toggleShuffle(minecraft);
+
          }
+		 if (OVERLAY_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
+		    HologramAppearance.setHidden(!HologramAppearance.isHidden());
+		 }
       }
    }
 
