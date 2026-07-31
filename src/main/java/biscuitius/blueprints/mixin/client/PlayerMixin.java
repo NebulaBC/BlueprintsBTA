@@ -5,15 +5,27 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.entity.Entity;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.item.ItemStack;
+import net.minecraft.core.util.helper.DamageType;
 import net.minecraft.core.util.helper.DyeColor;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Player.class)
 public abstract class PlayerMixin {
-   @Inject(method = "dropPlayerItemWithRandomChoice", at = @At("HEAD"), cancellable = true)
+   @Inject(method = "hurt", at = @At("HEAD"), cancellable = true)
+   private void blueprints$exitDesignModeOnDamage(Entity attacker, int damage, DamageType type, CallbackInfoReturnable<Boolean> cir) {
+      if (DesignModeState.isActive()) {
+         Minecraft mc = Minecraft.getMinecraft();
+         if (mc != null) {
+            DesignModeState.handleDamageExit(mc);
+         }
+      }
+   }
+
+   @Inject(method = "dropItem", at = @At("HEAD"), cancellable = true)
    private void blueprints$cancelDesignPlayerDrop(ItemStack itemStack, boolean random, CallbackInfo ci) {
       if (DesignModeState.isActive() && (Object)this == DesignModeState.getDesignPlayer()) {
          ci.cancel();

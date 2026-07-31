@@ -186,8 +186,8 @@ public final class HologramCache implements HologramListener {
          return null;
       }
 
-      if (mc.currentWorld != null && mc.currentWorld.saveHandler != null) {
-         String dir = readWorldDirName(mc.currentWorld.saveHandler);
+      if (mc.currentWorld != null && mc.currentWorld.getLevelStorage() != null) {
+         String dir = readWorldDirName(mc.currentWorld.getLevelStorage());
          if (dir != null && !dir.isEmpty()) {
             return "sp_" + sanitise(dir);
          }

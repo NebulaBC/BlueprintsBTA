@@ -6,10 +6,14 @@ import net.minecraft.core.block.Block;
 import net.minecraft.core.block.BlockLogic;
 import net.minecraft.core.block.BlockLogicAxisAligned;
 import net.minecraft.core.block.BlockLogicBed;
+import net.minecraft.core.block.BlockLogicButton;
 import net.minecraft.core.block.BlockLogicDoor;
 import net.minecraft.core.block.BlockLogicLadder;
+import net.minecraft.core.block.BlockLogicLever;
 import net.minecraft.core.block.BlockLogicRotatable;
+import net.minecraft.core.block.BlockLogicSign;
 import net.minecraft.core.block.BlockLogicStairs;
+import net.minecraft.core.block.BlockLogicTorch;
 import net.minecraft.core.block.BlockLogicTrapDoor;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.world.World;
@@ -140,11 +144,51 @@ public final class BlueprintTransform {
          } else {
             return low == 2 ? high | 1 : meta;
          }
-      } else if (logic instanceof BlockLogicRotatable) {
-         int high = meta & -8;
-         return high | rotateDirectionId(meta & 7, cw);
       } else {
-         return logic instanceof BlockLogicLadder ? rotateDirectionId(meta, cw) : meta;
+         if (logic instanceof BlockLogicRotatable) {
+            int high = meta & -8;
+            return high | rotateDirectionId(meta & 7, cw);
+         }
+
+         if (logic instanceof BlockLogicLadder) {
+            return rotateDirectionId(meta, cw);
+         }
+
+         if (logic instanceof BlockLogicTorch) {
+            int dir = meta & 7;
+            return dir >= 1 && dir <= 4 ? meta & -8 | rotateWallMountDir(dir, cw) : meta;
+         }
+
+         if (logic instanceof BlockLogicButton) {
+            int dir = meta & 7;
+            return dir >= 1 && dir <= 4 ? meta & -8 | rotateWallMountDir(dir, cw) : meta;
+         }
+
+         if (logic instanceof BlockLogicLever) {
+            int rot = meta & 15;
+            if (rot >= 1 && rot <= 4) {
+               return meta & -16 | rotateWallMountDir(rot, cw);
+            }
+
+            int swapped = rot;
+            if (rot == 5) {
+               swapped = 6;
+            } else if (rot == 6) {
+               swapped = 5;
+            } else if (rot == 7) {
+               swapped = 8;
+            } else if (rot == 8) {
+               swapped = 7;
+            }
+
+            return meta & -16 | swapped;
+         } else if (logic instanceof BlockLogicSign) {
+            int low = meta & 15;
+            int high = meta & -16;
+            return ((BlockLogicSign)logic).isFreeStanding ? high | (cw ? low + 4 : low + 12) & 15 : high | rotateWallSignDir(low, cw);
+         } else {
+            return meta;
+         }
       }
    }
 
@@ -152,25 +196,67 @@ public final class BlueprintTransform {
       BlockLogic logic = logicFor(blockId);
       if (logic == null) {
          return meta;
-      } else if (logic instanceof BlockLogicStairs) {
+      }
+
+      if (logic instanceof BlockLogicStairs) {
          int high = meta & -4;
          return high | flipStairsDir(meta & 3, axis);
-      } else if (logic instanceof BlockLogicDoor) {
+      }
+
+      if (logic instanceof BlockLogicDoor) {
          int high = meta & -4;
          return high | flipDoorOrBedDir(meta & 3, axis, true);
-      } else if (logic instanceof BlockLogicBed) {
+      }
+
+      if (logic instanceof BlockLogicBed) {
          int high = meta & -4;
          return high | flipDoorOrBedDir(meta & 3, axis, false);
-      } else if (logic instanceof BlockLogicTrapDoor) {
+      }
+
+      if (logic instanceof BlockLogicTrapDoor) {
          int high = meta & -4;
          return high | flipTrapDoorDir(meta & 3, axis);
-      } else if (logic instanceof BlockLogicAxisAligned) {
+      }
+
+      if (logic instanceof BlockLogicAxisAligned) {
          return meta;
-      } else if (logic instanceof BlockLogicRotatable) {
+      }
+
+      if (logic instanceof BlockLogicRotatable) {
          int high = meta & -8;
          return high | flipDirectionId(meta & 7, axis);
+      }
+
+      if (logic instanceof BlockLogicLadder) {
+         return flipDirectionId(meta, axis);
+      }
+
+      if (logic instanceof BlockLogicTorch) {
+         int dir = meta & 7;
+         return dir >= 1 && dir <= 4 ? meta & -8 | flipWallMountDir(dir, axis) : meta;
+      }
+
+      if (logic instanceof BlockLogicButton) {
+         int dir = meta & 7;
+         return dir >= 1 && dir <= 4 ? meta & -8 | flipWallMountDir(dir, axis) : meta;
+      }
+
+      if (logic instanceof BlockLogicLever) {
+         int rot = meta & 15;
+         return rot >= 1 && rot <= 4 ? meta & -16 | flipWallMountDir(rot, axis) : meta;
+      }
+
+      if (logic instanceof BlockLogicSign) {
+         int low = meta & 15;
+         int high = meta & -16;
+         if (((BlockLogicSign)logic).isFreeStanding) {
+            int flipped = axis == BlueprintTransform.FlipAxis.X ? 16 - low & 15 : 8 - low & 15;
+            return high | flipped;
+         } else {
+            return high | flipWallSignDir(low, axis);
+         }
       } else {
-         return logic instanceof BlockLogicLadder ? flipDirectionId(meta, axis) : meta;
+         return meta;
       }
    }
 
@@ -246,6 +332,55 @@ public final class BlueprintTransform {
          return 2;
       } else {
          return dir == 2 ? 0 : dir;
+      }
+   }
+
+   private static int rotateWallMountDir(int dir, boolean cw) {
+      int[] cwMap = new int[]{0, 3, 4, 2, 1};
+      int[] ccwMap = new int[]{0, 4, 3, 1, 2};
+      return dir >= 1 && dir <= 4 ? (cw ? cwMap : ccwMap)[dir] : dir;
+   }
+
+   private static int flipWallMountDir(int dir, BlueprintTransform.FlipAxis axis) {
+      if (axis == BlueprintTransform.FlipAxis.X) {
+         if (dir == 1) {
+            return 2;
+         } else {
+            return dir == 2 ? 1 : dir;
+         }
+      } else if (dir == 3) {
+         return 4;
+      } else {
+         return dir == 4 ? 3 : dir;
+      }
+   }
+
+   private static int rotateWallSignDir(int dir, boolean cw) {
+      switch (dir) {
+         case 2:
+            return cw ? 5 : 4;
+         case 3:
+            return cw ? 4 : 5;
+         case 4:
+            return cw ? 2 : 3;
+         case 5:
+            return cw ? 3 : 2;
+         default:
+            return dir;
+      }
+   }
+
+   private static int flipWallSignDir(int dir, BlueprintTransform.FlipAxis axis) {
+      if (axis == BlueprintTransform.FlipAxis.X) {
+         if (dir == 4) {
+            return 5;
+         } else {
+            return dir == 5 ? 4 : dir;
+         }
+      } else if (dir == 2) {
+         return 3;
+      } else {
+         return dir == 3 ? 2 : dir;
       }
    }
 

@@ -231,42 +231,42 @@ public final class BlueprintIO {
             try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(file)))) {
                byte[] magic = new byte[3];
                in.readFully(magic);
-               if (magic[0] == MAGIC[0] && magic[1] == MAGIC[1] && magic[2] == MAGIC[2]) {
-                  int version = in.readByte() & 255;
-                  if (version != 1) {
-                     LOGGER.warn("Unsupported blueprint version {} in {}", version, file);
-                     return false;
-                  }
-
-                  int count = in.readInt();
-                  if (count >= 0 && count <= 16000000) {
-                     HologramStore.clearWorld(world);
-
-                     for (int i = 0; i < count; i++) {
-                        int rx = in.readInt();
-                        int ry = in.readInt();
-                        int rz = in.readInt();
-                        int blockId = in.readShort() & '\uffff';
-                        int metadata = in.readShort() & '\uffff';
-                        int x = anchorX + rx;
-                        int y = anchorY + ry;
-                        int z = anchorZ + rz;
-                        if (y >= 0 && y < 256) {
-                           HologramBlock block = new HologramBlock(blockId, metadata);
-                           HologramStore.put(world, x, y, z, block);
-                        }
-                     }
-
-                     HologramStore.recomputeBounds(world);
-                     return true;
-                  } else {
-                     LOGGER.warn("Bad blueprint entry count {} in {}", count, file);
-                     return false;
-                  }
-               } else {
+               if (magic[0] != MAGIC[0] || magic[1] != MAGIC[1] || magic[2] != MAGIC[2]) {
                   LOGGER.warn("Bad blueprint magic in {}", file);
                   return false;
                }
+
+               int version = in.readByte() & 255;
+               if (version != 1) {
+                  LOGGER.warn("Unsupported blueprint version {} in {}", version, file);
+                  return false;
+               }
+
+               int count = in.readInt();
+               if (count < 0 || count > 16000000) {
+                  LOGGER.warn("Bad blueprint entry count {} in {}", count, file);
+                  return false;
+               }
+
+               HologramStore.clearWorld(world);
+
+               for (int i = 0; i < count; i++) {
+                  int rx = in.readInt();
+                  int ry = in.readInt();
+                  int rz = in.readInt();
+                  int blockId = in.readShort() & '\uffff';
+                  int metadata = in.readShort() & '\uffff';
+                  int x = anchorX + rx;
+                  int y = anchorY + ry;
+                  int z = anchorZ + rz;
+                  if (y >= 0 && y < 256) {
+                     HologramBlock block = new HologramBlock(blockId, metadata);
+                     HologramStore.put(world, x, y, z, block);
+                  }
+               }
+
+               HologramStore.recomputeBounds(world);
+               return true;
             } catch (Exception e) {
                LOGGER.warn("Failed to load blueprint '{}' from {}: {}", new Object[]{name, file, e.getMessage()});
                return false;

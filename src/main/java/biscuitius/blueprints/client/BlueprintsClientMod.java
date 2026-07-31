@@ -2,6 +2,15 @@ package biscuitius.blueprints.client;
 
 import biscuitius.blueprints.client.hologram.HologramCache;
 import biscuitius.blueprints.client.hologram.HologramRenderer;
+import biscuitius.blueprints.client.item.BlueprintItem;
+import biscuitius.blueprints.client.item.ClipboardToolItem;
+import biscuitius.blueprints.client.item.FillToolItem;
+import biscuitius.blueprints.client.item.LineToolItem;
+import biscuitius.blueprints.client.item.MoveToolItem;
+import biscuitius.blueprints.client.item.OvalToolItem;
+import biscuitius.blueprints.client.item.RectangleToolItem;
+import biscuitius.blueprints.client.item.ReplaceToolItem;
+import biscuitius.blueprints.client.item.RotateToolItem;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
@@ -19,6 +28,15 @@ public class BlueprintsClientMod implements ClientModInitializer {
    public void onInitializeClient() {
       loadTranslations();
       BlueprintsConfig.load();
+      BlueprintItem.register();
+      MoveToolItem.register();
+      RotateToolItem.register();
+      LineToolItem.register();
+      ClipboardToolItem.register();
+      FillToolItem.register();
+      ReplaceToolItem.register();
+      RectangleToolItem.register();
+      OvalToolItem.register();
       HologramRenderer.install();
       HologramCache.install();
       LOGGER.info("Blueprints client features initialized.");

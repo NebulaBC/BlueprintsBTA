@@ -7,7 +7,7 @@ import net.minecraft.client.gui.ButtonElement;
 import net.minecraft.client.gui.Screen;
 import net.minecraft.client.gui.ScrolledSelectionList;
 import net.minecraft.client.gui.TextFieldElement;
-import net.minecraft.client.render.tessellator.Tessellator;
+import net.minecraft.client.render.tessellator.TessellatorGeneral;
 import org.lwjgl.input.Keyboard;
 
 public final class ScreenBlueprintBrowser extends Screen {
@@ -51,7 +51,7 @@ public final class ScreenBlueprintBrowser extends Screen {
       int actionX = fieldX + fieldWidth + gap;
       int deleteX = actionX + actionWidth + gap;
       int cancelX = deleteX + deleteWidth + gap;
-      this.nameField = new TextFieldElement(this, this.font, fieldX, rowY, fieldWidth, 20, "", "Blueprint name");
+      this.nameField = new TextFieldElement(this, this.fontRenderer, fieldX, rowY, fieldWidth, 20, "", "Blueprint name");
       this.nameField.setMaxStringLength(48);
       this.nameField.setFocused(true);
       this.nameField.setTextChangeListener(tf -> {
@@ -240,27 +240,16 @@ public final class ScreenBlueprintBrowser extends Screen {
       if (this.list != null) {
          this.list.render(mx, my, partialTick);
       }
-
-      String title;
-      switch (this.mode) {
-         case SAVE:
-            title = "Save Blueprint";
-            break;
-         case LOAD:
-            title = "Load Blueprint";
-            break;
-         case CREATE_FROM_SELECTION:
-            title = "Create Blueprint";
-            break;
-         default:
-            title = "Blueprint";
-      }
-
-      this.drawStringCentered(this.font, title, this.width / 2, 12, 16777215);
+      this.drawStringCenteredShadow(this.fontRenderer, switch (this.mode) {
+         case SAVE -> "Save Blueprint";
+         case LOAD -> "Load Blueprint";
+         case CREATE_FROM_SELECTION -> "Create Blueprint";
+         default -> "Blueprint";
+      }, this.width / 2, 12, 16777215);
       if (this.statusLine != null) {
-         this.drawStringCentered(this.font, this.statusLine, this.width / 2, this.height - 54, this.statusColour);
+         this.drawStringCenteredShadow(this.fontRenderer, this.statusLine, this.width / 2, this.height - 54, this.statusColour);
       } else {
-         this.drawStringCentered(this.font, "Saved to .minecraft/blueprints/", this.width / 2, this.height - 54, 8947848);
+         this.drawStringCenteredShadow(this.fontRenderer, "Saved to .minecraft/blueprints/", this.width / 2, this.height - 54, 8947848);
       }
 
       if (this.nameField != null) {
@@ -311,9 +300,11 @@ public final class ScreenBlueprintBrowser extends Screen {
          ScreenBlueprintBrowser.this.renderBackground();
       }
 
-      protected void renderItem(int index, int x, int y, int height, Tessellator tessellator) {
+      protected void renderItem(int index, int x, int y, int height, TessellatorGeneral tessellator) {
          if (index >= 0 && index < ScreenBlueprintBrowser.this.names.size()) {
-            ScreenBlueprintBrowser.this.drawString(ScreenBlueprintBrowser.this.font, ScreenBlueprintBrowser.this.names.get(index), x + 2, y + 4, 16777215);
+            ScreenBlueprintBrowser.this.drawStringShadow(
+               ScreenBlueprintBrowser.this.fontRenderer, ScreenBlueprintBrowser.this.names.get(index), x + 2, y + 4, 16777215
+            );
          }
       }
    }

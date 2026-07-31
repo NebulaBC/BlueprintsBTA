@@ -13,13 +13,13 @@ import net.minecraft.client.gui.ScrolledSelectionList;
 import net.minecraft.client.input.InputDevice;
 import net.minecraft.client.render.item.model.ItemModel;
 import net.minecraft.client.render.item.model.ItemModelDispatcher;
-import net.minecraft.client.render.tessellator.Tessellator;
+import net.minecraft.client.render.tessellator.TessellatorGeneral;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.enums.EnumDropCause;
 import net.minecraft.core.item.ItemStack;
+import net.minecraft.core.util.helper.LightIndexHelper;
 import net.minecraft.core.world.World;
-import org.lwjgl.opengl.GL11;
 
 public final class ScreenBlueprintMaterials extends Screen {
    private static final int ID_DONE = 0;
@@ -53,7 +53,7 @@ public final class ScreenBlueprintMaterials extends Screen {
          this.list.render(mx, my, partialTick);
       }
 
-      this.drawStringCentered(this.font, "Blueprint Materials", this.width / 2, 12, 16777215);
+      this.drawStringCenteredShadow(this.fontRenderer, "Blueprint Materials", this.width / 2, 12, 16777215);
       super.render(mx, my, partialTick);
    }
 
@@ -183,7 +183,7 @@ public final class ScreenBlueprintMaterials extends Screen {
          ScreenBlueprintMaterials.this.renderBackground();
       }
 
-      protected void renderItem(int index, int x, int y, int height, Tessellator tessellator) {
+      protected void renderItem(int index, int x, int y, int height, TessellatorGeneral tessellator) {
          if (index >= 0 && index < ScreenBlueprintMaterials.this.materials.size()) {
             ScreenBlueprintMaterials.Material m = ScreenBlueprintMaterials.this.materials.get(index);
             int iconX = x + 2;
@@ -192,25 +192,17 @@ public final class ScreenBlueprintMaterials extends Screen {
             try {
                ItemModel model = (ItemModel)ItemModelDispatcher.getInstance().getDispatch(m.stack.getItem());
                if (model != null) {
-                  GL11.glPushAttrib(286785);
-                  GL11.glPushMatrix();
-                  GL11.glEnable(2929);
-                  model.renderItemIntoGui(
-                     Tessellator.instance, ScreenBlueprintMaterials.this.font, ScreenBlueprintMaterials.this.mc.textureManager, m.stack, iconX, iconY, 1.0F
-                  );
-                  GL11.glPopMatrix();
-                  GL11.glPopAttrib();
-                  GL11.glDisable(2896);
-                  GL11.glDisable(2929);
-                  GL11.glEnable(3553);
-                  GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+                  model.renderGui(tessellator, null, m.stack, iconX, iconY, LightIndexHelper.lightIndex2i(15, 15), 1.0F);
+               } else {
+                  ScreenBlueprintMaterials.this.drawRect(iconX, iconY, iconX + 16, iconY + 16, -2144128205);
                }
-            } catch (Throwable var11) {
+            } catch (Throwable ignored) {
+               ScreenBlueprintMaterials.this.drawRect(iconX, iconY, iconX + 16, iconY + 16, -2144128205);
             }
 
             String name = this.safeName(m.stack);
             String line = ScreenBlueprintMaterials.formatCount(m.count) + "x " + name;
-            ScreenBlueprintMaterials.this.drawString(ScreenBlueprintMaterials.this.font, line, iconX + 20, y + 6, 16777215);
+            ScreenBlueprintMaterials.this.drawStringShadow(ScreenBlueprintMaterials.this.fontRenderer, line, iconX + 20, y + 6, 16777215);
          }
       }
 

@@ -109,15 +109,15 @@ public final class PrinterMode {
 
    private static boolean tryPlaceFromInventorySlot(Minecraft mc, PlayerLocal player, int invSlot, int x, int y, int z) {
       ContainerInventory inv = player.inventory;
-      int originalSelected = inv.getCurrentItemIndex();
+      int originalSelected = inv.getCurrentSlot();
       if (invSlot >= 0 && invSlot <= 8) {
-         inv.setCurrentItemIndex(invSlot, true);
+         inv.setCurrentSlot(invSlot, true);
          ItemStack held = inv.getCurrentItem();
 
          try {
             return held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
          } finally {
-            inv.setCurrentItemIndex(originalSelected, true);
+            inv.setCurrentSlot(originalSelected, true);
          }
       } else {
          int hotbarTarget = -1;
@@ -137,14 +137,14 @@ public final class PrinterMode {
             return false;
          }
 
-         int containerId = player.inventorySlots.containerId;
+         int containerId = player.inventoryMenu.containerId;
          int hotbarNumber = hotbarTarget + 1;
          boolean swapped = false;
 
          try {
             mc.playerController.handleInventoryMouseClick(containerId, InventoryAction.HOTBAR_ITEM_SWAP, new int[]{invSlot, hotbarNumber}, player);
             swapped = true;
-            inv.setCurrentItemIndex(hotbarTarget, true);
+            inv.setCurrentSlot(hotbarTarget, true);
             ItemStack held = inv.getCurrentItem();
             return held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
          } finally {
@@ -152,7 +152,7 @@ public final class PrinterMode {
                mc.playerController.handleInventoryMouseClick(containerId, InventoryAction.HOTBAR_ITEM_SWAP, new int[]{invSlot, hotbarNumber}, player);
             }
 
-            inv.setCurrentItemIndex(originalSelected, true);
+            inv.setCurrentSlot(originalSelected, true);
          }
       }
    }

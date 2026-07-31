@@ -2,6 +2,7 @@ package biscuitius.blueprints.client;
 
 import biscuitius.blueprints.client.hologram.HologramAppearance;
 import biscuitius.blueprints.client.hologram.HologramRenderer;
+import biscuitius.blueprints.client.tool.ShapeToolState;
 import biscuitius.blueprints.mixin.client.MinecraftAccessor;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,13 +13,14 @@ import net.minecraft.client.gui.ScreenSignEditor;
 import net.minecraft.client.gui.container.ScreenContainerAbstract;
 import net.minecraft.client.input.InputDevice;
 import net.minecraft.client.input.PlayerInput;
+import net.minecraft.client.option.GameSettings;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.render.camera.EntityCameraFirstPerson;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.item.block.ItemBlock;
 import net.minecraft.core.lang.I18n;
-import net.minecraft.core.player.gamemode.Gamemode;
+import net.minecraft.core.player.gamemode.Gamemodes;
 import net.minecraft.core.player.inventory.container.ContainerInventory;
 import org.lwjgl.input.Keyboard;
 
@@ -81,7 +83,6 @@ public final class DesignModeState {
    public static void toggleInteractionMode(Minecraft minecraft) {
       passthroughMode = !passthroughMode;
       BlueprintsConfig.save();
-      showInteractionModeMessage(minecraft);
    }
 
    public static void toggleShuffle(Minecraft minecraft) {
@@ -107,7 +108,7 @@ public final class DesignModeState {
          }
 
          int chosen = candidates.get(shuffleRandom.nextInt(candidates.size()));
-         inventory.setCurrentItemIndex(chosen, true);
+         inventory.setCurrentSlot(chosen, true);
          return inventory.mainInventory[chosen];
       } else {
          return inventory.getCurrentItem();
@@ -174,7 +175,7 @@ public final class DesignModeState {
 
          if (designPlayer != null && designPlayer.world == minecraft.currentWorld) {
             copyPlayerState(realPlayer, designPlayer);
-            designPlayer.setGamemode(Gamemode.creative);
+            designPlayer.setGamemode(Gamemodes.CREATIVE);
             designPlayer.setNoclip(true);
             designPlayer.syncPlacementMode();
             designPlayer.removed = false;
@@ -186,7 +187,7 @@ public final class DesignModeState {
          HologramAppearance.setHidden(false);
          clearMovement(realPlayer);
          clearMovement(designPlayer);
-         minecraft.gameSettings.thirdPersonView.value = 0;
+         GameSettings.THIRD_PERSON_VIEW.value = 0;
          HologramRenderer.markAllDirty();
          attachDesignCamera(minecraft);
          showStatusMessage(minecraft, true);
@@ -195,13 +196,14 @@ public final class DesignModeState {
 
    private static void exitDesignMode(Minecraft minecraft) {
       active = false;
+      MoveToolController.reset();
       if (minecraft != null && minecraft.currentWorld != null) {
          HologramRenderer.markAllDirty();
       }
 
       if (realPlayer != null) {
          realPlayer.removed = false;
-         if (!realPlayer.getGamemode().canPlayerFly()) {
+         if (!realPlayer.getGamemode().hasPlayerFlight()) {
             realPlayer.setNoclip(false);
          }
 
@@ -231,6 +233,7 @@ public final class DesignModeState {
       PrinterMode.disable();
       if (!active) {
          BlueprintSelection.clearAll();
+         ShapeToolState.clearAll();
       } else {
          active = false;
          if (designPlayer != null) {
@@ -239,6 +242,7 @@ public final class DesignModeState {
 
          realPlayer = null;
          BlueprintSelection.clearAll();
+         ShapeToolState.clearAll();
       }
    }
 
@@ -281,7 +285,7 @@ public final class DesignModeState {
          }
 
          if (pendingCurrentItemIndex >= 0) {
-            ghost.inventory.setCurrentItemIndex(pendingCurrentItemIndex, true);
+            ghost.inventory.setCurrentSlot(pendingCurrentItemIndex, true);
             ghost.inventory.setHotbarOffset(pendingHotbarOffset, true);
          }
 
@@ -291,12 +295,12 @@ public final class DesignModeState {
       } else if (preservedState != null) {
          copyInventory(preservedState.inventory.mainInventory, ghost.inventory.mainInventory);
          copyInventory(preservedState.inventory.armorInventory, ghost.inventory.armorInventory);
-         ghost.inventory.setCurrentItemIndex(preservedState.inventory.getCurrentItemIndex(), true);
+         ghost.inventory.setCurrentSlot(preservedState.inventory.getCurrentSlot(), true);
          ghost.inventory.setHotbarOffset(preservedState.inventory.getHotbarOffset(), true);
          ghost.score = preservedState.score;
       }
 
-      ghost.setGamemode(Gamemode.creative);
+      ghost.setGamemode(Gamemodes.CREATIVE);
       ghost.setNoclip(true);
       ghost.syncPlacementMode();
       return ghost;
@@ -337,15 +341,6 @@ public final class DesignModeState {
             ? i18n.translateKey(shuffleEnabled ? "blueprints.shuffle.enabled" : "blueprints.shuffle.disabled")
             : (shuffleEnabled ? "Shuffle enabled" : "Shuffle disabled");
          DesignModeOverlay.show(message, shuffleEnabled ? 5635925 : 16733525);
-      }
-   }
-
-   private static void showInteractionModeMessage(Minecraft minecraft) {
-      if (minecraft != null) {
-         I18n i18n = I18n.getInstance();
-         String key = passthroughMode ? "blueprints.interaction_mode.passthrough" : "blueprints.interaction_mode.fulfill";
-         String message = i18n != null ? i18n.translateKey(key) : (passthroughMode ? "Interaction Mode: Passthrough" : "Interaction Mode: Fulfill");
-         DesignModeOverlay.show(message, passthroughMode ? 16762880 : 5635925);
       }
    }
 }

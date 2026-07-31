@@ -2,9 +2,7 @@ package biscuitius.blueprints.mixin.client;
 
 import biscuitius.blueprints.client.DesignModeState;
 import net.minecraft.core.entity.Entity;
-import net.minecraft.core.world.IVehicle;
 import net.minecraft.core.world.World;
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -14,19 +12,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Entity.class)
 public abstract class EntityMixin {
-
-   @Shadow
-   public boolean noPhysics;
    @Shadow
    public World world;
    @Unique
    private boolean blueprints$wasNoclip;
 
+   @Shadow
+   public abstract boolean hasNoPhysics();
+
+   @Shadow
+   public abstract void setNoPhysics(boolean var1);
+
    @Inject(method = "move", at = @At("HEAD"))
    private void blueprints$forceCollisionHead(double xd, double yd, double zd, CallbackInfo ci) {
-      if (this.noPhysics && DesignModeState.isActive() && (Object)this == DesignModeState.getDesignPlayer()) {
+      if (this.hasNoPhysics() && DesignModeState.isActive() && (Object)this == DesignModeState.getDesignPlayer()) {
          this.blueprints$wasNoclip = true;
-         this.noPhysics = false;
+         this.setNoPhysics(false);
       } else {
          this.blueprints$wasNoclip = false;
       }
@@ -35,7 +36,7 @@ public abstract class EntityMixin {
    @Inject(method = "move", at = @At("RETURN"))
    private void blueprints$forceCollisionReturn(double xd, double yd, double zd, CallbackInfo ci) {
       if (this.blueprints$wasNoclip) {
-         this.noPhysics = true;
+         this.setNoPhysics(true);
          this.blueprints$wasNoclip = false;
       }
    }

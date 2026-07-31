@@ -95,8 +95,5 @@ public final class BlueprintSelection {
    private static final class State {
       int[] cornerA;
       int[] cornerB;
-
-      private State() {
-      }
    }
 }

@@ -1,8 +1,10 @@
 package biscuitius.blueprints.mixin.client;
 
 import biscuitius.blueprints.client.DesignModeState;
+import biscuitius.blueprints.client.MoveToolController;
 import biscuitius.blueprints.client.PrinterMode;
 import biscuitius.blueprints.client.ScreenDesignTools;
+import biscuitius.blueprints.client.UpdateChecker;
 import biscuitius.blueprints.client.hologram.HologramCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.PlayerLocal;
@@ -29,6 +31,7 @@ public abstract class MinecraftMixin {
       Minecraft mc = (Minecraft)(Object)this;
       HologramCache.tick(mc);
       PrinterMode.tick(mc);
+      UpdateChecker.tick(mc);
    }
 
    @Inject(method = "runTick", at = @At("RETURN"))
@@ -36,35 +39,35 @@ public abstract class MinecraftMixin {
       DesignModeState.tickDesignPlayer((Minecraft)(Object)this);
    }
 
-   @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IZ)V"))
-   private void blueprints$routeKeyEventsToDesignPlayer(PlayerInput input, int keyCode, boolean pressed) {
+   @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IIZ)V"))
+   private void blueprints$routeKeyEventsToDesignPlayer(PlayerInput input, int keyCode, int mouseCode, boolean pressed) {
       Minecraft minecraft = (Minecraft)(Object)this;
       if (!DesignModeState.isActive() || minecraft.currentScreen == null) {
          PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
          if (DesignModeState.isActive() && controlPlayer != null && controlPlayer.input != null) {
-            controlPlayer.input.keyEvent(keyCode, pressed);
+            controlPlayer.input.keyEvent(keyCode, mouseCode, pressed);
          } else {
-            input.keyEvent(keyCode, pressed);
+            input.keyEvent(keyCode, mouseCode, pressed);
          }
       }
    }
 
    @Redirect(
       method = "runTick",
-      at = @At(value = "INVOKE", target = "Lnet/minecraft/core/player/inventory/container/ContainerInventory;changeCurrentItem(I)V")
+      at = @At(value = "INVOKE", target = "Lnet/minecraft/core/player/inventory/container/ContainerInventory;changeCurrentSlot(I)V")
    )
    private void blueprints$routeScrollToDesignPlayer(ContainerInventory inventory, int scrollDelta) {
       Minecraft minecraft = (Minecraft)(Object)this;
       PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
       if (DesignModeState.isActive() && controlPlayer != null) {
-         controlPlayer.inventory.changeCurrentItem(scrollDelta);
+         controlPlayer.inventory.changeCurrentSlot(scrollDelta);
       } else {
-         inventory.changeCurrentItem(scrollDelta);
+         inventory.changeCurrentSlot(scrollDelta);
       }
    }
 
    @Redirect(
-      method = {"clickMouse", "mineBlocks", "clickMiddleMouseButton"},
+      method = {"clickMouse", "clickMiddleMouseButton"},
       at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;thePlayer:Lnet/minecraft/client/entity/player/PlayerLocal;", opcode = 180)
    )
    private PlayerLocal blueprints$routeMouseActionsToDesignPlayer(Minecraft minecraft) {
@@ -89,15 +92,17 @@ public abstract class MinecraftMixin {
 
    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/entity/player/PlayerLocal;setNoclip(Z)V"))
    private void blueprints$routeSetNoclip(PlayerLocal player, boolean noclip) {
-      if (DesignModeState.isActive()) {
-         PlayerLocal dp = DesignModeState.getDesignPlayer();
-         if (dp != null) {
-            dp.setNoclip(noclip);
-            return;
+      if (!MoveToolController.isHeld((Minecraft)(Object)this)) {
+         if (DesignModeState.isActive()) {
+            PlayerLocal dp = DesignModeState.getDesignPlayer();
+            if (dp != null) {
+               dp.setNoclip(noclip);
+               return;
+            }
          }
-      }
 
-      player.setNoclip(noclip);
+         player.setNoclip(noclip);
+      }
    }
 
    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/entity/player/PlayerLocal;setFlySpeed(F)V"))
@@ -126,19 +131,19 @@ public abstract class MinecraftMixin {
       player.setFlightSmoothness(smoothness);
    }
 
-   @Redirect(method = "runTick", at = @At(value = "FIELD", target = "Lnet/minecraft/client/entity/player/PlayerLocal;noPhysics:Z", opcode = 180))
+   @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/entity/player/PlayerLocal;hasNoPhysics()Z"))
    private boolean blueprints$routeNoPhysicsRead(PlayerLocal player) {
       if (DesignModeState.isActive()) {
          PlayerLocal dp = DesignModeState.getDesignPlayer();
          if (dp != null) {
-            return dp.noPhysics;
+            return dp.hasNoPhysics();
          }
       }
 
-      return player.noPhysics;
+      return player.hasNoPhysics();
    }
 
-   @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IZ)V", shift = Shift.AFTER))
+   @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IIZ)V", shift = Shift.AFTER))
    private void blueprints$handleDesignModeToggle(CallbackInfo ci) {
       Minecraft mc = (Minecraft)(Object)this;
       DesignModeState.handleKeyPress(mc);

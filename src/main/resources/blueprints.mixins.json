@@ -1,7 +1,7 @@
 {
   "required": true,
   "package": "biscuitius.blueprints.mixin.client",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_17",
   "injectors": {
     "defaultRequire": 1
   },
@@ -31,12 +31,13 @@
     "HologramSelectionBoxMixin",
     "RenderGlobalEntitiesMixin",
     "TessellatorTintMixin",
-    "BlockModelBasketMixin",
     "DesignModeClickMixin",
     "DesignModeRaytraceMixin",
     "WorldDesignPlacementMixin",
+    "ChunkDesignPlacementMixin",
     "WorldClientMPDesignMixin",
     "FulfillClickMixin",
-    "PickBlockHologramMixin"
+    "PickBlockHologramMixin",
+    "PlayerInputMoveToolMixin"
   ]
 }

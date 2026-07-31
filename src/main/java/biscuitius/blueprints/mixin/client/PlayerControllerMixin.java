@@ -23,22 +23,6 @@ public abstract class PlayerControllerMixin {
       return DesignModeState.getControlPlayer(minecraft);
    }
 
-   @Redirect(
-      method = "getBlockReachDistance",
-      at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;thePlayer:Lnet/minecraft/client/entity/player/PlayerLocal;", opcode = 180)
-   )
-   private PlayerLocal blueprints$routeBlockReach(Minecraft minecraft) {
-      return DesignModeState.getControlPlayer(minecraft);
-   }
-
-   @Redirect(
-      method = "getEntityReachDistance",
-      at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;thePlayer:Lnet/minecraft/client/entity/player/PlayerLocal;", opcode = 180)
-   )
-   private PlayerLocal blueprints$routeEntityReach(Minecraft minecraft) {
-      return DesignModeState.getControlPlayer(minecraft);
-   }
-
    @Inject(method = "useItemStackOnNothing", at = @At("HEAD"), cancellable = true)
    private void blueprints$cancelUseOnNothing(Player player, World world, ItemStack itemstack, CallbackInfoReturnable<Boolean> cir) {
       if (DesignModeState.isActive()) {

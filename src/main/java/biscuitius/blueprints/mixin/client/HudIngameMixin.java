@@ -17,17 +17,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class HudIngameMixin {
    private static HitResult blueprints$savedMouseOver;
 
-   @Redirect(
-      method = "renderGameOverlay",
-      at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/component/HudComponent;isVisible(Lnet/minecraft/client/Minecraft;)Z")
-   )
-   private boolean blueprints$hideSurvivalHud(HudComponent component, Minecraft mc) {
+   @Redirect(method = "renderGameOverlay", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/hud/component/HudComponent;isVisible()Z"))
+   private boolean blueprints$hideSurvivalHud(HudComponent component) {
       return !DesignModeState.isActive()
             || component != HudComponents.HEALTH_BAR
-               && component != HudComponents.ARMOR_BAR
+               && component != HudComponents.BOOTS_BAR
+               && component != HudComponents.LEGGINGS_BAR
+               && component != HudComponents.CHESTPLATE_BAR
+               && component != HudComponents.HELMET_BAR
                && component != HudComponents.OXYGEN_BAR
                && component != HudComponents.FIRE_BAR
-         ? component.isVisible(mc)
+         ? component.isVisible()
          : false;
    }
 

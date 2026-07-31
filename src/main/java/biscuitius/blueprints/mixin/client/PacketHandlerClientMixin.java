@@ -17,7 +17,7 @@ public abstract class PacketHandlerClientMixin {
    @Final
    private Minecraft mc;
 
-   @Inject(method = "handleUpdateHealth", at = @At("HEAD"))
+   @Inject(method = "handleSetHealth", at = @At("HEAD"))
    private void blueprints$exitOnDamage(PacketSetHealth packet, CallbackInfo ci) {
       if (DesignModeState.isActive() && this.mc != null && this.mc.thePlayer != null && packet.healthMP < this.mc.thePlayer.getHealth()) {
          DesignModeState.handleDamageExit(this.mc);

@@ -1,6 +1,7 @@
 package biscuitius.blueprints.mixin.client;
 
 import biscuitius.blueprints.client.hologram.HologramRenderer;
+import biscuitius.blueprints.client.preview.PreviewRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.render.camera.ICamera;
@@ -39,6 +40,7 @@ public abstract class HologramRenderMixin {
             double cy = camera.getY(partialTicks);
             double cz = camera.getZ(partialTicks);
             HologramRenderer.render(mc.currentWorld, renderPass, cx, cy, cz);
+            PreviewRenderer.render(mc.currentWorld, renderPass, cx, cy, cz);
          }
       }
    }

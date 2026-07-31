@@ -7,8 +7,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.PlayerLocal;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.core.util.phys.HitResult;
-import net.minecraft.core.util.phys.Vec3;
-import net.minecraft.core.util.phys.HitResult.HitType;
+import net.minecraft.core.util.phys.HitResult.Entity;
+import org.joml.Vector3d;
+import org.joml.Vector3dc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -22,14 +23,15 @@ public abstract class DesignModeRaytraceMixin {
          Minecraft mc = Minecraft.getMinecraft();
          if (mc != null && mc.currentWorld != null) {
             HitResult existing = mc.objectMouseOver;
-            if (existing == null || existing.hitType != HitType.ENTITY) {
+            if (!(existing instanceof Entity)) {
                if (HologramStore.hasEntries(mc.currentWorld)) {
                   PlayerLocal controlPlayer = DesignModeState.getControlPlayer(mc);
                   if (controlPlayer != null) {
-                     double reach = mc.playerController.getBlockReachDistance();
-                     Vec3 start = controlPlayer.getPosition(partialTicks, false);
-                     Vec3 look = controlPlayer.getViewVector(partialTicks);
-                     Vec3 end = start.add(look.x * reach, look.y * reach, look.z * reach);
+                     double reach = controlPlayer.getGamemode().getBlockReachDistance();
+                     Vector3dc pos = controlPlayer.getPosition(partialTicks, true);
+                     Vector3dc look = controlPlayer.getViewVector(partialTicks);
+                     Vector3dc start = new Vector3d(pos);
+                     Vector3dc end = new Vector3d(pos).add(look.x() * reach, look.y() * reach, look.z() * reach);
                      HitResult overlaid = HologramController.pickHologramOverlay(mc.currentWorld, start, end, existing);
                      if (overlaid != existing) {
                         mc.objectMouseOver = overlaid;

@@ -27,14 +27,11 @@ public final class HologramBlock {
    public boolean equals(Object o) {
       if (this == o) {
          return true;
+      } else {
+         return !(o instanceof HologramBlock other)
+            ? false
+            : this.blockId == other.blockId && this.metadata == other.metadata && (this.nbt == null ? other.nbt == null : this.nbt.equals(other.nbt));
       }
-
-      if (!(o instanceof HologramBlock)) {
-         return false;
-      }
-
-      HologramBlock other = (HologramBlock)o;
-      return this.blockId == other.blockId && this.metadata == other.metadata && (this.nbt == null ? other.nbt == null : this.nbt.equals(other.nbt));
    }
 
    @Override

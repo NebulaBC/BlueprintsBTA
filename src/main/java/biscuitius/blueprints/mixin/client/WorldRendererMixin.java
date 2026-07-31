@@ -8,7 +8,7 @@ import net.minecraft.client.entity.player.PlayerLocal;
 import net.minecraft.client.render.WorldRenderer;
 import net.minecraft.client.world.WorldClient;
 import net.minecraft.core.entity.Entity;
-import net.minecraft.core.util.phys.AABB;
+import org.joml.primitives.AABBdc;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -27,10 +27,10 @@ public abstract class WorldRendererMixin {
       method = "getMouseOver",
       at = @At(
          value = "INVOKE",
-         target = "Lnet/minecraft/client/world/WorldClient;getEntitiesWithinAABBExcludingEntity(Lnet/minecraft/core/entity/Entity;Lnet/minecraft/core/util/phys/AABB;)Ljava/util/List;"
+         target = "Lnet/minecraft/client/world/WorldClient;getEntitiesWithinAABBExcludingEntity(Lnet/minecraft/core/entity/Entity;Lorg/joml/primitives/AABBdc;)Ljava/util/List;"
       )
    )
-   private List<Entity> blueprints$skipEntityPicking(WorldClient world, Entity exclude, AABB box) {
+   private List<Entity> blueprints$skipEntityPicking(WorldClient world, Entity exclude, AABBdc box) {
       return DesignModeState.isActive() ? Collections.emptyList() : world.getEntitiesWithinAABBExcludingEntity(exclude, box);
    }
 }

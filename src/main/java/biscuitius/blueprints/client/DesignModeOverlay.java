@@ -1,7 +1,7 @@
 package biscuitius.blueprints.client;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.render.Font;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.core.util.helper.Time;
 import org.lwjgl.opengl.GL11;
 
@@ -37,10 +37,9 @@ public final class DesignModeOverlay {
                GL11.glBlendFunc(770, 771);
             }
 
-            Font font = mc.font;
-            int textWidth = font.getStringWidth(message);
+            int textWidth = mc.font.stringWidth(message);
             int y = hotbarTopY - 10;
-            font.drawStringWithShadow(message, hotbarCentreX - textWidth / 2, y, argb);
+            new Gui().drawStringShadow(mc.font, message, hotbarCentreX - textWidth / 2, y, argb);
             GL11.glDisable(3042);
             GL11.glEnable(3008);
          }

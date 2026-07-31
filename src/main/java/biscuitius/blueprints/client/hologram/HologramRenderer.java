@@ -2,6 +2,7 @@ package biscuitius.blueprints.client.hologram;
 
 import biscuitius.blueprints.client.BlueprintSelection;
 import biscuitius.blueprints.client.DesignModeState;
+import biscuitius.blueprints.client.tool.ShapeToolState;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -11,20 +12,27 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import net.minecraft.client.render.LightmapHelper;
-import net.minecraft.client.render.RenderBlocks;
 import net.minecraft.client.render.TileEntityRenderDispatcher;
 import net.minecraft.client.render.block.model.BlockModel;
 import net.minecraft.client.render.block.model.BlockModelDispatcher;
-import net.minecraft.client.render.tessellator.Tessellator;
-import net.minecraft.client.render.tessellator.TessellatorStandard;
+import net.minecraft.client.render.camera.ICamera;
+import net.minecraft.client.render.renderer.BlendFactor;
+import net.minecraft.client.render.renderer.DrawMode;
+import net.minecraft.client.render.renderer.GLRenderer;
+import net.minecraft.client.render.renderer.Shaders;
+import net.minecraft.client.render.renderer.State;
+import net.minecraft.client.render.tessellator.RenderBuffer;
+import net.minecraft.client.render.tessellator.TessellatorGeneral;
+import net.minecraft.client.render.tessellator.TessellatorShader;
+import net.minecraft.client.render.texture.stitcher.TextureRegistry;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.block.entity.TileEntity;
 import net.minecraft.core.world.World;
 import net.minecraft.core.world.chunk.ChunkCache;
+import net.minecraft.core.world.pos.TilePos;
 import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL41;
 import org.slf4j.LoggerFactory;
 
 public final class HologramRenderer implements HologramListener {
@@ -35,6 +43,7 @@ public final class HologramRenderer implements HologramListener {
    private static final int MAX_REBUILDS_PER_FRAME = 8;
    public static volatile boolean HOLOGRAM_PASS_ACTIVE;
    public static volatile boolean WRONG_BLOCK_PASS_ACTIVE;
+   public static volatile boolean PREVIEW_PASS_ACTIVE;
    private static final int MODE_HOLOGRAM = 0;
    private static final int MODE_WRONG_ONLY = 1;
    private static final int MODE_HOLOGRAM_WRONG = 2;
@@ -44,6 +53,7 @@ public final class HologramRenderer implements HologramListener {
    private final Map<World, Map<Long, TileEntity>> dummyTileEntities = new IdentityHashMap<>();
    private final Deque<HologramRenderer.Section> dirtyQueue = new ArrayDeque<>();
    private final List<Object[]> pendingFulfilledRemovals = new ArrayList<>();
+   private final TilePos scratchPos = new TilePos();
    private static volatile boolean glInfoLogged;
    private static volatile boolean firstDrawLogged;
    private static volatile boolean firstRebuildLogged;
@@ -77,28 +87,31 @@ public final class HologramRenderer implements HologramListener {
          try {
             int storeEntries = HologramStore.rawView(world).size();
             int sectionCount = worldSections.size();
-            int withList = 0;
+            int withBuffer = 0;
             int[] nonEmpty = new int[3];
 
             for (HologramRenderer.Section s : worldSections.values()) {
-               if (s.firstDisplayList != 0) {
-                  withList++;
-               }
+               boolean any = false;
 
                for (int p = 0; p < 3; p++) {
-                  if (!s.emptyPass[p]) {
+                  if (s.buffers[p] != null) {
                      nonEmpty[p]++;
+                     any = true;
                   }
+               }
+
+               if (any) {
+                  withBuffer++;
                }
             }
 
             LoggerFactory.getLogger("blueprints-client")
                .info(
-                  "First hologram draw — storeEntries={} sections={} sectionsWithList={} nonEmpty[solid={}, translucent={}, wrong={}] designMode={} hidden={} layerCutoffY={}",
+                  "First hologram draw — storeEntries={} sections={} sectionsWithBuffer={} nonEmpty[solid={}, translucent={}, wrong={}] designMode={} hidden={} layerCutoffY={}",
                   new Object[]{
                      storeEntries,
                      sectionCount,
-                     withList,
+                     withBuffer,
                      nonEmpty[0],
                      nonEmpty[1],
                      nonEmpty[2],
@@ -107,7 +120,7 @@ public final class HologramRenderer implements HologramListener {
                      HologramAppearance.getLayerCutoffY()
                   }
                );
-         } catch (Throwable var9) {
+         } catch (Throwable var10) {
          }
       }
    }
@@ -119,16 +132,8 @@ public final class HologramRenderer implements HologramListener {
          try {
             LoggerFactory.getLogger("blueprints-client")
                .info(
-                  "First hologram rebuild — verts[solid={}, translucent={}, wrong={}] anyRendered[solid={}, translucent={}, wrong={}] lightmapEnabled={}",
-                  new Object[]{
-                     vertsPerPass[0],
-                     vertsPerPass[1],
-                     vertsPerPass[2],
-                     anyRenderedPerPass[0],
-                     anyRenderedPerPass[1],
-                     anyRenderedPerPass[2],
-                     LightmapHelper.isLightmapEnabled()
-                  }
+                  "First hologram rebuild — verts[solid={}, translucent={}, wrong={}] anyRendered[solid={}, translucent={}, wrong={}]",
+                  new Object[]{vertsPerPass[0], vertsPerPass[1], vertsPerPass[2], anyRenderedPerPass[0], anyRenderedPerPass[1], anyRenderedPerPass[2]}
                );
          } catch (Throwable var3) {
          }
@@ -214,7 +219,7 @@ public final class HologramRenderer implements HologramListener {
       this.dummyTileEntities.remove(world);
       if (worldSections != null) {
          for (HologramRenderer.Section s : worldSections.values()) {
-            freeDisplayLists(s);
+            freeBuffers(s);
             s.queued = false;
          }
       }
@@ -259,47 +264,6 @@ public final class HologramRenderer implements HologramListener {
       }
    }
 
-   private static void drawWrongBlockPass(World world, Map<Long, HologramRenderer.Section> worldSections) {
-      boolean anyWrong = false;
-
-      for (HologramRenderer.Section s : worldSections.values()) {
-         if (s.firstDisplayList != 0 && !s.emptyPass[2]) {
-            anyWrong = true;
-            break;
-         }
-      }
-
-      if (anyWrong) {
-         boolean wasBlend = GL11.glIsEnabled(3042);
-         boolean wasOffset = GL11.glIsEnabled(32823);
-         GL11.glEnable(3042);
-         GL11.glBlendFunc(770, 771);
-         GL11.glEnable(32823);
-         GL11.glPolygonOffset(-1.0F, -1.0F);
-         GL11.glDepthMask(false);
-         WRONG_BLOCK_PASS_ACTIVE = true;
-
-         try {
-            for (HologramRenderer.Section s : worldSections.values()) {
-               if (s.firstDisplayList != 0 && !s.emptyPass[2]) {
-                  GL11.glCallList(s.firstDisplayList + 2);
-               }
-            }
-         } finally {
-            WRONG_BLOCK_PASS_ACTIVE = false;
-            GL11.glDepthMask(true);
-            GL11.glPolygonOffset(0.0F, 0.0F);
-            if (!wasOffset) {
-               GL11.glDisable(32823);
-            }
-
-            if (!wasBlend) {
-               GL11.glDisable(3042);
-            }
-         }
-      }
-   }
-
    public static void markAllDirty() {
       for (Map<Long, HologramRenderer.Section> worldSections : INSTANCE.sections.values()) {
          for (HologramRenderer.Section s : worldSections.values()) {
@@ -332,16 +296,12 @@ public final class HologramRenderer implements HologramListener {
       }
    }
 
-   private static void freeDisplayLists(HologramRenderer.Section s) {
-      if (s.firstDisplayList != 0) {
-         GL11.glDeleteLists(s.firstDisplayList, 3);
-         s.firstDisplayList = 0;
-      }
-   }
-
-   private static void allocDisplayLists(HologramRenderer.Section s) {
-      if (s.firstDisplayList == 0) {
-         s.firstDisplayList = GL11.glGenLists(3);
+   private static void freeBuffers(HologramRenderer.Section s) {
+      for (int p = 0; p < 3; p++) {
+         if (s.buffers[p] != null) {
+            s.buffers[p].delete();
+            s.buffers[p] = null;
+         }
       }
    }
 
@@ -356,38 +316,80 @@ public final class HologramRenderer implements HologramListener {
                   INSTANCE.flushDirty();
                }
 
-               boolean designMode = DesignModeState.isActive();
-               boolean wasBlend = false;
-               if (!designMode) {
-                  wasBlend = GL11.glIsEnabled(3042);
-                  GL11.glEnable(3042);
-                  GL11.glBlendFunc(770, 771);
-                  GL11.glDepthMask(renderPass == 0);
+               GLRenderer.pushFrame();
+               GLRenderer.setShader(Shaders.ITEM);
+               TextureRegistry.worldAtlas.bind();
+               GLRenderer.enableState(State.BLEND);
+               GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
+               GLRenderer.setDepthMask(renderPass == 0);
+               GLRenderer.setAlphaTest(0.0F);
+               if (DesignModeState.isActive()) {
+                  GLRenderer.setColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+               } else {
+                  GLRenderer.setColor4f(
+                     HologramAppearance.getR() / 255.0F,
+                     HologramAppearance.getG() / 255.0F,
+                     HologramAppearance.getB() / 255.0F,
+                     HologramAppearance.getOpacity()
+                  );
                }
 
-               GL11.glPushMatrix();
-               GL11.glTranslated(-cameraX, -cameraY, -cameraZ);
+               GLRenderer.modelM4f().translate((float)(-cameraX), (float)(-cameraY), (float)(-cameraZ));
                if (renderPass == 0) {
                   logFirstDrawOnce(world, worldSections);
                }
 
                for (HologramRenderer.Section s : worldSections.values()) {
-                  if (s.firstDisplayList != 0 && !s.emptyPass[renderPass]) {
-                     GL11.glCallList(s.firstDisplayList + renderPass);
+                  RenderBuffer buf = s.buffers[renderPass];
+                  if (buf != null) {
+                     GLRenderer.render(buf);
                   }
                }
 
+               GLRenderer.popFrame();
                if (renderPass == 0) {
-                  drawBoundsWireframe(world);
-                  drawWrongBlockPass(world, worldSections);
-               }
-
-               GL11.glPopMatrix();
-               GL11.glDepthMask(true);
-               if (!designMode && !wasBlend) {
-                  GL11.glDisable(3042);
+                  drawBoundsWireframe(world, cameraX, cameraY, cameraZ);
+                  drawWrongBlockPass(world, worldSections, cameraX, cameraY, cameraZ);
                }
             }
+         }
+      }
+   }
+
+   private static void drawWrongBlockPass(World world, Map<Long, HologramRenderer.Section> worldSections, double cameraX, double cameraY, double cameraZ) {
+      boolean anyWrong = false;
+
+      for (HologramRenderer.Section s : worldSections.values()) {
+         if (s.buffers[2] != null) {
+            anyWrong = true;
+            break;
+         }
+      }
+
+      if (anyWrong) {
+         GLRenderer.pushFrame();
+         GLRenderer.setShader(Shaders.ITEM);
+         TextureRegistry.worldAtlas.bind();
+         GLRenderer.enableState(State.BLEND);
+         GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
+         GLRenderer.enableState(State.POLYGON_OFFSET_FILL);
+         GLRenderer.setPolygonOffset(-1.0F, -1.0F);
+         GLRenderer.setDepthMask(false);
+         GLRenderer.setAlphaTest(0.0F);
+         GLRenderer.setColor4f(1.0F, 0.19F, 0.19F, 0.75F);
+         GLRenderer.modelM4f().translate((float)(-cameraX), (float)(-cameraY), (float)(-cameraZ));
+         WRONG_BLOCK_PASS_ACTIVE = true;
+
+         try {
+            for (HologramRenderer.Section s : worldSections.values()) {
+               RenderBuffer buf = s.buffers[2];
+               if (buf != null) {
+                  GLRenderer.render(buf);
+               }
+            }
+         } finally {
+            WRONG_BLOCK_PASS_ACTIVE = false;
+            GLRenderer.popFrame();
          }
       }
    }
@@ -396,18 +398,19 @@ public final class HologramRenderer implements HologramListener {
       if (world != null) {
          boolean designMode = DesignModeState.isActive();
          boolean drawSelection = designMode && BlueprintSelection.hasAny(world);
+         boolean drawShapePointsFlag = designMode && ShapeToolState.hasAnyPoint(world);
          boolean drawTileEntities = !HologramAppearance.isHidden() && HologramStore.hasEntries(world);
-         if (drawSelection || drawTileEntities) {
+         if (drawSelection || drawShapePointsFlag || drawTileEntities) {
             if (drawTileEntities) {
                INSTANCE.renderHologramTileEntities(world, partialTick);
             }
 
             if (drawSelection) {
-               GL11.glPushMatrix();
-               GL11.glTranslated(-cameraX, -cameraY, -cameraZ);
-               drawSelectionBox(world);
-               GL11.glPopMatrix();
-               GL11.glDepthMask(true);
+               drawSelectionBox(world, cameraX, cameraY, cameraZ);
+            }
+
+            if (drawShapePointsFlag) {
+               drawShapePoints(world, cameraX, cameraY, cameraZ);
             }
          }
       }
@@ -416,164 +419,106 @@ public final class HologramRenderer implements HologramListener {
    private void renderHologramTileEntities(World world, float partialTick) {
       Map<Long, HologramBlock> worldBlocks = HologramStore.rawView(world);
       if (!worldBlocks.isEmpty()) {
-         Map<Long, TileEntity> cache = this.dummyTileEntities.computeIfAbsent(world, w -> new HashMap<>());
-         Tessellator tess = Tessellator.instance;
          TileEntityRenderDispatcher dispatcher = TileEntityRenderDispatcher.instance;
-         Iterator var7 = worldBlocks.entrySet().iterator();
+         ICamera camera = dispatcher.camera;
+         if (camera != null) {
+            Map<Long, TileEntity> cache = this.dummyTileEntities.computeIfAbsent(world, w -> new HashMap<>());
+            TessellatorGeneral tess = GLRenderer.getTessellator();
+            Iterator var8 = worldBlocks.entrySet().iterator();
 
-         while (true) {
-            TileEntity te;
             while (true) {
-               if (!var7.hasNext()) {
-                  return;
-               }
+		   	   TileEntity te;
+               while (true) {
+                  if (!var8.hasNext()) {
+                     return;
+                  }
 
-               Entry<Long, HologramBlock> e = (Entry<Long, HologramBlock>)var7.next();
-               long key = e.getKey();
-               HologramBlock h = e.getValue();
-               int blockId = h.blockId;
-               if (blockId > 0 && blockId < Blocks.blocksList.length) {
-                  Block<?> block = Blocks.blocksList[blockId];
-                  if (block != null && block.entitySupplier != null) {
-                     int x = HologramStore.unpackX(key);
-                     int y = HologramStore.unpackY(key);
-                     int z = HologramStore.unpackZ(key);
-                     if (HologramAppearance.isYVisible(y) && world.getBlockId(x, y, z) != blockId) {
-                        te = cache.get(key);
-                        if (te != null) {
-                           break;
-                        }
+                  Entry<Long, HologramBlock> e = (Entry<Long, HologramBlock>)var8.next();
+                  long key = e.getKey();
+                  HologramBlock h = e.getValue();
+                  int blockId = h.blockId;
+                  if (blockId > 0 && blockId < Blocks.blocksList.length) {
+                     Block<?> block = Blocks.blocksList[blockId];
+                     if (block != null && block.entitySupplier != null) {
+                        int x = HologramStore.unpackX(key);
+                        int y = HologramStore.unpackY(key);
+                        int z = HologramStore.unpackZ(key);
+                        if (HologramAppearance.isYVisible(y) && world.getBlockId(x, y, z) != blockId) {
+                           te = cache.get(key);
+                           if (te != null) {
+                              break;
+                           }
 
-                        try {
-                           Object supplied = block.entitySupplier.get();
-                           if (!(supplied instanceof TileEntity)) {
+                           try {
+                              if (!(block.entitySupplier.get() instanceof TileEntity)) {
+                                 continue;
+                              }
+                           } catch (Throwable t) {
                               continue;
                            }
 
-                           te = (TileEntity)supplied;
-                        } catch (Throwable t) {
-                           continue;
+                           te.worldObj = world;
+                           te.tilePos.x = x;
+                           te.tilePos.y = y;
+                           te.tilePos.z = z;
+                           cache.put(key, te);
+                           break;
                         }
-
-                        te.worldObj = world;
-                        te.x = x;
-                        te.y = y;
-                        te.z = z;
-                        cache.put(key, te);
-                        break;
                      }
                   }
                }
-            }
 
-            if (dispatcher.hasRenderer(te)) {
-               HologramPlacementContext.begin(world);
+               if (dispatcher.hasRenderer(te)) {
+                  HologramPlacementContext.begin(world);
+                  GLRenderer.pushFrame();
 
-               try {
-                  dispatcher.renderTileEntity(tess, dispatcher.camera, te, partialTick);
-               } catch (Throwable var23) {
-               } finally {
-                  HologramPlacementContext.end();
+                  try {
+                     dispatcher.renderTileEntity(tess, camera, world, te, partialTick);
+                  } catch (Throwable var24) {
+                  } finally {
+                     GLRenderer.popFrame();
+                     HologramPlacementContext.end();
+                  }
                }
             }
          }
       }
    }
 
-   private static void drawBoundsWireframe(World world) {
+   private static void drawBoundsWireframe(World world, double cx, double cy, double cz) {
       int[] bounds = HologramStore.getBounds(world);
       if (bounds != null) {
-         double x0 = bounds[0];
-         double y0 = bounds[1];
-         double z0 = bounds[2];
-         double x1 = bounds[3] + 1.0;
-         double y1 = bounds[4] + 1.0;
-         double z1 = bounds[5] + 1.0;
-         boolean wasTex = GL11.glIsEnabled(3553);
-         boolean wasLight = GL11.glIsEnabled(2896);
-         boolean wasFog = GL11.glIsEnabled(2912);
-         boolean wasCull = GL11.glIsEnabled(2884);
-         float prevLineW = GL11.glGetFloat(2849);
-         if (wasTex) {
-            GL11.glDisable(3553);
-         }
-
-         if (wasLight) {
-            GL11.glDisable(2896);
-         }
-
-         if (wasFog) {
-            GL11.glDisable(2912);
-         }
-
-         if (wasCull) {
-            GL11.glDisable(2884);
-         }
-
-         GL11.glLineWidth(2.0F);
+         double x0 = bounds[0] - cx;
+         double y0 = bounds[1] - cy;
+         double z0 = bounds[2] - cz;
+         double x1 = bounds[3] + 1.0 - cx;
+         double y1 = bounds[4] + 1.0 - cy;
+         double z1 = bounds[5] + 1.0 - cz;
          float r = HologramAppearance.getR() / 255.0F;
          float g = HologramAppearance.getG() / 255.0F;
          float b = HologramAppearance.getB() / 255.0F;
          float a = HologramAppearance.getA() / 255.0F;
-         GL11.glDepthMask(false);
-         GL11.glEnable(2929);
-         GL11.glColor4f(r, g, b, a);
-         emitWireCube(x0, y0, z0, x1, y1, z1);
-         GL11.glDisable(2929);
-         GL11.glColor4f(r, g, b, a * 0.25F);
-         emitWireCube(x0, y0, z0, x1, y1, z1);
-         GL11.glEnable(2929);
-         GL11.glLineWidth(prevLineW);
-         if (wasCull) {
-            GL11.glEnable(2884);
-         }
-
-         if (wasFog) {
-            GL11.glEnable(2912);
-         }
-
-         if (wasLight) {
-            GL11.glEnable(2896);
-         }
-
-         if (wasTex) {
-            GL11.glEnable(3553);
-         }
-
-         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+         GLRenderer.pushFrame();
+         GLRenderer.setShader(Shaders.LINES);
+         GLRenderer.enableState(State.BLEND);
+         GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
+         GLRenderer.setLineWidth(2.0F);
+         GLRenderer.setDepthMask(false);
+         TessellatorGeneral t = GLRenderer.getTessellator();
+         t.startDrawing(DrawMode.LINES);
+         t.setColor4f(r, g, b, a);
+         emitWireCube(t, x0, y0, z0, x1, y1, z1);
+         t.draw();
+         GLRenderer.disableState(State.DEPTH_TEST);
+         t.startDrawing(DrawMode.LINES);
+         t.setColor4f(r, g, b, a * 0.25F);
+         emitWireCube(t, x0, y0, z0, x1, y1, z1);
+         t.draw();
+         GLRenderer.popFrame();
       }
    }
 
-   private static void emitWireCube(double x0, double y0, double z0, double x1, double y1, double z1) {
-      GL11.glBegin(1);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glEnd();
-   }
-
-   private static void drawSelectionBox(World world) {
+   private static void drawSelectionBox(World world, double cx, double cy, double cz) {
       BlueprintSelection.Box box = BlueprintSelection.getBox(world);
       double x0;
       double y0;
@@ -604,117 +549,138 @@ public final class HologramRenderer implements HologramListener {
          z1 = z0 + 1.0;
       }
 
+      x0 -= cx;
+      y0 -= cy;
+      z0 -= cz;
+      x1 -= cx;
+      y1 -= cy;
+      z1 -= cz;
       float r = HologramAppearance.getR() / 255.0F;
       float g = HologramAppearance.getG() / 255.0F;
       float bcol = HologramAppearance.getB() / 255.0F;
-      boolean wasTex = GL11.glIsEnabled(3553);
-      boolean wasLight = GL11.glIsEnabled(2896);
-      boolean wasFog = GL11.glIsEnabled(2912);
-      boolean wasCull = GL11.glIsEnabled(2884);
-      boolean wasBlend = GL11.glIsEnabled(3042);
-      boolean wasOffset = GL11.glIsEnabled(32823);
-      float prevLineW = GL11.glGetFloat(2849);
-      GL13.glActiveTexture(33985);
-      boolean wasLightmap = GL11.glIsEnabled(3553);
-      GL11.glDisable(3553);
-      GL13.glActiveTexture(33984);
-      if (wasTex) {
-         GL11.glDisable(3553);
-      }
-
-      if (wasLight) {
-         GL11.glDisable(2896);
-      }
-
-      if (wasFog) {
-         GL11.glDisable(2912);
-      }
-
-      GL11.glEnable(3042);
-      GL11.glBlendFunc(770, 771);
-      GL11.glDepthMask(false);
-      if (!wasCull) {
-         GL11.glEnable(2884);
-      }
-
-      GL11.glEnable(32823);
-      GL11.glPolygonOffset(-1.0F, -1.0F);
-      GL11.glColor4f(r, g, bcol, 0.5F);
-      emitSolidCube(x0, y0, z0, x1, y1, z1);
-      GL11.glPolygonOffset(0.0F, 0.0F);
-      if (!wasOffset) {
-         GL11.glDisable(32823);
-      }
-
-      GL11.glDisable(2884);
-      GL11.glLineWidth(2.0F);
-      GL11.glEnable(2929);
-      GL11.glColor4f(r, g, bcol, 1.0F);
-      emitWireCube(x0, y0, z0, x1, y1, z1);
-      GL11.glDisable(2929);
-      GL11.glColor4f(r, g, bcol, 0.25F);
-      emitWireCube(x0, y0, z0, x1, y1, z1);
-      GL11.glEnable(2929);
-      GL11.glDepthMask(true);
-      GL11.glLineWidth(prevLineW);
-      if (!wasBlend) {
-         GL11.glDisable(3042);
-      }
-
-      if (wasCull) {
-         GL11.glEnable(2884);
-      } else {
-         GL11.glDisable(2884);
-      }
-
-      if (wasFog) {
-         GL11.glEnable(2912);
-      }
-
-      if (wasLight) {
-         GL11.glEnable(2896);
-      }
-
-      if (wasTex) {
-         GL11.glEnable(3553);
-      }
-
-      GL13.glActiveTexture(33985);
-      if (wasLightmap) {
-         GL11.glEnable(3553);
-      }
-
-      GL13.glActiveTexture(33984);
-      GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+      GLRenderer.pushFrame();
+      GLRenderer.enableState(State.BLEND);
+      GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
+      GLRenderer.setDepthMask(false);
+      TessellatorGeneral t = GLRenderer.getTessellator();
+      GLRenderer.setShader(Shaders.COLOR);
+      GLRenderer.enableState(State.CULL_FACE);
+      GLRenderer.enableState(State.POLYGON_OFFSET_FILL);
+      GLRenderer.setPolygonOffset(-1.0F, -1.0F);
+      t.startDrawingQuads();
+      t.setColor4f(r, g, bcol, 0.5F);
+      emitSolidCube(t, x0, y0, z0, x1, y1, z1);
+      t.draw();
+      GLRenderer.disableState(State.POLYGON_OFFSET_FILL);
+      GLRenderer.setShader(Shaders.LINES);
+      GLRenderer.disableState(State.CULL_FACE);
+      GLRenderer.setLineWidth(2.0F);
+      t.startDrawing(DrawMode.LINES);
+      t.setColor4f(r, g, bcol, 1.0F);
+      emitWireCube(t, x0, y0, z0, x1, y1, z1);
+      t.draw();
+      GLRenderer.disableState(State.DEPTH_TEST);
+      t.startDrawing(DrawMode.LINES);
+      t.setColor4f(r, g, bcol, 0.25F);
+      emitWireCube(t, x0, y0, z0, x1, y1, z1);
+      t.draw();
+      GLRenderer.popFrame();
    }
 
-   private static void emitSolidCube(double x0, double y0, double z0, double x1, double y1, double z1) {
-      GL11.glBegin(7);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x0, y1, z1);
-      GL11.glVertex3d(x1, y1, z1);
-      GL11.glVertex3d(x1, y1, z0);
-      GL11.glVertex3d(x0, y1, z0);
-      GL11.glVertex3d(x0, y0, z0);
-      GL11.glVertex3d(x1, y0, z0);
-      GL11.glVertex3d(x1, y0, z1);
-      GL11.glVertex3d(x0, y0, z1);
-      GL11.glEnd();
+   private static void drawShapePoints(World world, double cx, double cy, double cz) {
+      int[] a = ShapeToolState.getPointA(world);
+      int[] b = ShapeToolState.getPointB(world);
+      if (a != null || b != null) {
+         GLRenderer.pushFrame();
+         GLRenderer.setShader(Shaders.LINES);
+         GLRenderer.enableState(State.BLEND);
+         GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
+         GLRenderer.setLineWidth(2.0F);
+         GLRenderer.setDepthMask(false);
+         TessellatorGeneral t = GLRenderer.getTessellator();
+         if (a != null) {
+            drawShapePointCube(t, a, cx, cy, cz, 1.0F, 0.67F, 0.33F);
+         }
+
+         if (b != null) {
+            drawShapePointCube(t, b, cx, cy, cz, 0.33F, 0.67F, 1.0F);
+         }
+
+         GLRenderer.popFrame();
+      }
+   }
+
+   private static void drawShapePointCube(TessellatorGeneral t, int[] p, double cx, double cy, double cz, float r, float g, float b) {
+      double x0 = p[0] - cx;
+      double y0 = p[1] - cy;
+      double z0 = p[2] - cz;
+      double x1 = x0 + 1.0;
+      double y1 = y0 + 1.0;
+      double z1 = z0 + 1.0;
+      GLRenderer.enableState(State.DEPTH_TEST);
+      t.startDrawing(DrawMode.LINES);
+      t.setColor4f(r, g, b, 1.0F);
+      emitWireCube(t, x0, y0, z0, x1, y1, z1);
+      t.draw();
+      GLRenderer.disableState(State.DEPTH_TEST);
+      t.startDrawing(DrawMode.LINES);
+      t.setColor4f(r, g, b, 0.25F);
+      emitWireCube(t, x0, y0, z0, x1, y1, z1);
+      t.draw();
+   }
+
+   private static void emitWireCube(TessellatorGeneral t, double x0, double y0, double z0, double x1, double y1, double z1) {
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x0, y0, z1);
+      t.addVertex(x0, y0, z1);
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x0, y1, z1);
+      t.addVertex(x0, y1, z1);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x0, y0, z1);
+      t.addVertex(x0, y1, z1);
+   }
+
+   private static void emitSolidCube(TessellatorGeneral t, double x0, double y0, double z0, double x1, double y1, double z1) {
+      t.addVertex(x0, y0, z1);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x0, y1, z1);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x0, y0, z1);
+      t.addVertex(x0, y1, z1);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x0, y1, z1);
+      t.addVertex(x1, y1, z1);
+      t.addVertex(x1, y1, z0);
+      t.addVertex(x0, y1, z0);
+      t.addVertex(x0, y0, z0);
+      t.addVertex(x1, y0, z0);
+      t.addVertex(x1, y0, z1);
+      t.addVertex(x0, y0, z1);
    }
 
    private void flushDirty() {
@@ -731,7 +697,7 @@ public final class HologramRenderer implements HologramListener {
                this.rebuild(s);
                budget--;
             } else {
-               freeDisplayLists(s);
+               freeBuffers(s);
             }
          }
 
@@ -748,27 +714,14 @@ public final class HologramRenderer implements HologramListener {
 
    private void rebuild(HologramRenderer.Section s) {
       s.dirty = false;
-      int baseX = s.sectionX << 4;
-      int baseY = s.sectionY << 4;
-      int baseZ = s.sectionZ << 4;
+      int baseX = s.baseX();
+      int baseY = s.baseY();
+      int baseZ = s.baseZ();
       if (!HologramStore.hasSectionHolograms(s.world, baseX, baseY, baseZ)) {
-         freeDisplayLists(s);
-
-         for (int p = 0; p < 3; p++) {
-            s.emptyPass[p] = true;
-         }
-
+         freeBuffers(s);
          this.sections.get(s.world).remove(s.key());
       } else {
-         HologramChunkCache cache = new HologramChunkCache(
-            s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16
-         );
-         RenderBlocks renderBlocks = new RenderBlocks(cache);
-         RenderBlocks previousRenderBlocks = BlockModel.renderBlocks;
-         BlockModel.setRenderBlocks(renderBlocks);
-         allocDisplayLists(s);
          List<long[]> entries = new ArrayList<>();
-         List<long[]> toRemoveAfter = null;
          int maxBaseX = baseX + 16;
          int maxBaseY = Math.min(256, baseY + 16);
          int maxBaseZ = baseZ + 16;
@@ -787,11 +740,6 @@ public final class HologramRenderer implements HologramListener {
                   mode = 0;
                } else if (realId == h.blockId && realMeta == h.metadata) {
                   mode = 3;
-                  if (toRemoveAfter == null) {
-                     toRemoveAfter = new ArrayList<>();
-                  }
-
-                  toRemoveAfter.add(new long[]{x, y, z});
                } else {
                   Block<?> realBlock = realId < Blocks.blocksList.length ? Blocks.blocksList[realId] : null;
                   boolean replaceable = realBlock != null && realBlock.getMaterial().isReplaceable();
@@ -804,17 +752,21 @@ public final class HologramRenderer implements HologramListener {
 
          int[] vertsPerPass = firstRebuildLogged ? null : new int[3];
          boolean[] anyRenderedPerPass = firstRebuildLogged ? null : new boolean[3];
-         Tessellator tess = Tessellator.instance;
+         HologramChunkCache cache = new HologramChunkCache(
+            s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16
+         );
+         TessellatorShader tess = GLRenderer.getTessellator();
          HOLOGRAM_PASS_ACTIVE = true;
 
          try {
             for (int pass = 0; pass < 2; pass++) {
-               boolean anyRendered = false;
-               GL11.glNewList(s.firstDisplayList + pass, 4864);
-               tess.startDrawingQuads();
-               if (LightmapHelper.isLightmapEnabled()) {
-                  tess.setLightmapCoord(LightmapHelper.getLightmapCoord(15, 15));
+               if (s.buffers[pass] != null) {
+                  s.buffers[pass].delete();
+                  s.buffers[pass] = null;
                }
+
+               boolean anyRendered = false;
+               tess.startDrawingQuads();
 
                for (long[] entry : entries) {
                   int mode = (int)entry[5];
@@ -825,11 +777,10 @@ public final class HologramRenderer implements HologramListener {
                         if (block != null) {
                            BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
                            if (model != null && model.renderLayer() == pass) {
-                              if (LightmapHelper.isLightmapEnabled()) {
-                                 tess.setLightmapCoord(LightmapHelper.getLightmapCoord(15, 0));
-                              }
-
-                              anyRendered |= model.render(tess, (int)entry[0], (int)entry[1], (int)entry[2]);
+                              this.scratchPos.x = (int)entry[0];
+                              this.scratchPos.y = (int)entry[1];
+                              this.scratchPos.z = (int)entry[2];
+                              anyRendered |= model.render(tess, cache, this.scratchPos);
                            }
                         }
                      }
@@ -837,42 +788,42 @@ public final class HologramRenderer implements HologramListener {
                }
 
                if (vertsPerPass != null) {
-                  vertsPerPass[pass] = ((TessellatorStandard)tess).data.vertexCount;
+                  vertsPerPass[pass] = tess.vertexCount;
                   anyRenderedPerPass[pass] = anyRendered;
                }
 
-               tess.draw();
-               GL11.glEndList();
-               s.emptyPass[pass] = !anyRendered;
+               if (anyRendered) {
+                  s.buffers[pass] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
+               } else {
+                  tess.draw();
+               }
             }
          } finally {
             HOLOGRAM_PASS_ACTIVE = false;
-            BlockModel.setRenderBlocks(previousRenderBlocks);
          }
 
-         boolean var38 = false;
+         if (s.buffers[2] != null) {
+            s.buffers[2].delete();
+            s.buffers[2] = null;
+         }
+
+         boolean anyWrong = false;
 
          for (long[] entry : entries) {
             int mode = (int)entry[5];
             if (mode == 1 || mode == 2) {
-               var38 = true;
+               anyWrong = true;
                break;
             }
          }
 
-         GL11.glNewList(s.firstDisplayList + 2, 4864);
-         if (var38) {
+         if (anyWrong) {
             ChunkCache realCache = new ChunkCache(s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16);
-            RenderBlocks realRender = new RenderBlocks(realCache);
-            RenderBlocks save = BlockModel.renderBlocks;
-            BlockModel.setRenderBlocks(realRender);
             WRONG_BLOCK_PASS_ACTIVE = true;
 
             try {
                tess.startDrawingQuads();
-               if (LightmapHelper.isLightmapEnabled()) {
-                  tess.setLightmapCoord(LightmapHelper.getLightmapCoord(15, 0));
-               }
+               boolean wroteAny = false;
 
                for (long[] entry : entries) {
                   int mode = (int)entry[5];
@@ -883,7 +834,10 @@ public final class HologramRenderer implements HologramListener {
                         if (block != null) {
                            BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
                            if (model != null) {
-                              model.render(tess, (int)entry[0], (int)entry[1], (int)entry[2]);
+                              this.scratchPos.x = (int)entry[0];
+                              this.scratchPos.y = (int)entry[1];
+                              this.scratchPos.z = (int)entry[2];
+                              wroteAny |= model.render(tess, realCache, this.scratchPos);
                            }
                         }
                      }
@@ -891,27 +845,22 @@ public final class HologramRenderer implements HologramListener {
                }
 
                if (vertsPerPass != null) {
-                  vertsPerPass[2] = ((TessellatorStandard)tess).data.vertexCount;
-                  anyRenderedPerPass[2] = true;
+                  vertsPerPass[2] = tess.vertexCount;
+                  anyRenderedPerPass[2] = wroteAny;
                }
 
-               tess.draw();
+               if (wroteAny) {
+                  s.buffers[2] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
+               } else {
+                  tess.draw();
+               }
             } finally {
                WRONG_BLOCK_PASS_ACTIVE = false;
-               BlockModel.setRenderBlocks(save);
             }
          }
 
-         GL11.glEndList();
-         s.emptyPass[2] = !var38;
          if (vertsPerPass != null) {
             logFirstRebuildOnce(vertsPerPass, anyRenderedPerPass);
-         }
-
-         if (toRemoveAfter != null) {
-            for (long[] pos : toRemoveAfter) {
-               this.pendingFulfilledRemovals.add(new Object[]{s.world, (int)pos[0], (int)pos[1], (int)pos[2]});
-            }
          }
       }
    }
@@ -921,8 +870,7 @@ public final class HologramRenderer implements HologramListener {
       final int sectionX;
       final int sectionY;
       final int sectionZ;
-      int firstDisplayList;
-      final boolean[] emptyPass = new boolean[3];
+      final RenderBuffer[] buffers = new RenderBuffer[3];
       boolean dirty = true;
       boolean queued;
 
@@ -931,10 +879,18 @@ public final class HologramRenderer implements HologramListener {
          this.sectionX = HologramStore.unpackX(key);
          this.sectionY = HologramStore.unpackY(key);
          this.sectionZ = HologramStore.unpackZ(key);
+      }
 
-         for (int i = 0; i < 3; i++) {
-            this.emptyPass[i] = true;
-         }
+      int baseX() {
+         return this.sectionX << 4;
+      }
+
+      int baseY() {
+         return this.sectionY << 4;
+      }
+
+      int baseZ() {
+         return this.sectionZ << 4;
       }
 
       long key() {
