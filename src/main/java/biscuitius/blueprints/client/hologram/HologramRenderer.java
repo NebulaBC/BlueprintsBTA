@@ -280,9 +280,9 @@ public final class HologramRenderer implements HologramListener {
          WRONG_BLOCK_PASS_ACTIVE = true;
 
          try {
-            for (HologramRenderer.Section sx : worldSections.values()) {
-               if (sx.firstDisplayList != 0 && !sx.emptyPass[2]) {
-                  GL11.glCallList(sx.firstDisplayList + 2);
+            for (HologramRenderer.Section s : worldSections.values()) {
+               if (s.firstDisplayList != 0 && !s.emptyPass[2]) {
+                  GL11.glCallList(s.firstDisplayList + 2);
                }
             }
          } finally {
@@ -451,7 +451,7 @@ public final class HologramRenderer implements HologramListener {
                            }
 
                            te = (TileEntity)supplied;
-                        } catch (Throwable var25) {
+                        } catch (Throwable t) {
                            continue;
                         }
 
@@ -852,8 +852,8 @@ public final class HologramRenderer implements HologramListener {
 
          boolean var38 = false;
 
-         for (long[] entryx : entries) {
-            int mode = (int)entryx[5];
+         for (long[] entry : entries) {
+            int mode = (int)entry[5];
             if (mode == 1 || mode == 2) {
                var38 = true;
                break;
@@ -874,16 +874,16 @@ public final class HologramRenderer implements HologramListener {
                   tess.setLightmapCoord(LightmapHelper.getLightmapCoord(15, 0));
                }
 
-               for (long[] entryxx : entries) {
-                  int mode = (int)entryxx[5];
+               for (long[] entry : entries) {
+                  int mode = (int)entry[5];
                   if (mode == 1 || mode == 2) {
-                     int realId = (int)entryxx[6];
+                     int realId = (int)entry[6];
                      if (realId > 0 && realId < Blocks.blocksList.length) {
                         Block<?> block = Blocks.blocksList[realId];
                         if (block != null) {
                            BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
                            if (model != null) {
-                              model.render(tess, (int)entryxx[0], (int)entryxx[1], (int)entryxx[2]);
+                              model.render(tess, (int)entry[0], (int)entry[1], (int)entry[2]);
                            }
                         }
                      }

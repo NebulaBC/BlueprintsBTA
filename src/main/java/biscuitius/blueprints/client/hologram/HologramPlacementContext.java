@@ -60,7 +60,7 @@ public final class HologramPlacementContext {
       return (long)(x & 67108863) << 38 | (long)(z & 67108863) << 12 | y & 4095;
    }
 
-   public static enum Mode {
+   public enum Mode {
       NONE,
       NORMAL,
       DRY_RUN;

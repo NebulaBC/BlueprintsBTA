@@ -104,11 +104,11 @@ public final class DesignModeState {
 
          if (candidates.isEmpty()) {
             return inventory.getCurrentItem();
-         } else {
-            int chosen = candidates.get(shuffleRandom.nextInt(candidates.size()));
-            inventory.setCurrentItemIndex(chosen, true);
-            return inventory.mainInventory[chosen];
          }
+
+         int chosen = candidates.get(shuffleRandom.nextInt(candidates.size()));
+         inventory.setCurrentItemIndex(chosen, true);
+         return inventory.mainInventory[chosen];
       } else {
          return inventory.getCurrentItem();
       }

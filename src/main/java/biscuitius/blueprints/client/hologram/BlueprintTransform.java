@@ -80,16 +80,16 @@ public final class BlueprintTransform {
    private static BlueprintTransform.Snapshot snapshot(World world) {
       if (!HologramStore.hasEntries(world)) {
          return null;
-      } else {
-         int[] b = HologramStore.getBounds(world);
-         if (b == null) {
-            return null;
-         } else {
-            List<BlueprintTransform.Entry> entries = new ArrayList<>(HologramStore.size(world));
-            HologramStore.forEach(world, (x, y, z, h) -> entries.add(new BlueprintTransform.Entry(x, y, z, h)));
-            return new BlueprintTransform.Snapshot(entries, b[0], b[1], b[2], b[3], b[4], b[5]);
-         }
       }
+
+      int[] b = HologramStore.getBounds(world);
+      if (b == null) {
+         return null;
+      }
+
+      List<BlueprintTransform.Entry> entries = new ArrayList<>(HologramStore.size(world));
+      HologramStore.forEach(world, (x, y, z, h) -> entries.add(new BlueprintTransform.Entry(x, y, z, h)));
+      return new BlueprintTransform.Snapshot(entries, b[0], b[1], b[2], b[3], b[4], b[5]);
    }
 
    private static void commit(World world, List<BlueprintTransform.Entry> entries) {
@@ -106,23 +106,33 @@ public final class BlueprintTransform {
       BlockLogic logic = logicFor(blockId);
       if (logic == null) {
          return meta;
-      } else if (logic instanceof BlockLogicStairs) {
+      }
+
+      if (logic instanceof BlockLogicStairs) {
          int high = meta & -4;
          return high | rotateStairsDir(meta & 3, cw);
-      } else if (logic instanceof BlockLogicDoor) {
+      }
+
+      if (logic instanceof BlockLogicDoor) {
          int high = meta & -4;
          int dir = meta & 3;
          int rotated = cw ? dir + 1 & 3 : dir + 3 & 3;
          return high | rotated;
-      } else if (logic instanceof BlockLogicBed) {
+      }
+
+      if (logic instanceof BlockLogicBed) {
          int high = meta & -4;
          int dir = meta & 3;
          int rotated = cw ? dir + 1 & 3 : dir + 3 & 3;
          return high | rotated;
-      } else if (logic instanceof BlockLogicTrapDoor) {
+      }
+
+      if (logic instanceof BlockLogicTrapDoor) {
          int high = meta & -4;
          return high | rotateTrapDoorDir(meta & 3, cw);
-      } else if (logic instanceof BlockLogicAxisAligned) {
+      }
+
+      if (logic instanceof BlockLogicAxisAligned) {
          int low = meta & 3;
          int high = meta & -4;
          if (low == 1) {
@@ -282,12 +292,12 @@ public final class BlueprintTransform {
       }
    }
 
-   public static enum FlipAxis {
+   public enum FlipAxis {
       X,
       Z;
    }
 
-   public static enum Rotation {
+   public enum Rotation {
       CW,
       CCW;
    }

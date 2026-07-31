@@ -21,7 +21,7 @@ public abstract class FulfillClickMixin {
       if (clickType == 1) {
          if (!DesignModeState.isActive()) {
             if (!DesignModeState.isPassthroughMode()) {
-               Minecraft mc = Minecraft.getMinecraft();
+               Minecraft mc = (Minecraft)(Object)this;
                if (mc.currentWorld != null && mc.thePlayer != null) {
                   if (HologramStore.hasEntries(mc.currentWorld)) {
                      PlayerLocal player = mc.thePlayer;

@@ -13,15 +13,15 @@ public final class BlueprintSelection {
    private static BlueprintSelection.State state(World world, boolean create) {
       if (world == null) {
          return null;
-      } else {
-         BlueprintSelection.State s = STATES.get(world);
-         if (s == null && create) {
-            s = new BlueprintSelection.State();
-            STATES.put(world, s);
-         }
-
-         return s;
       }
+
+      BlueprintSelection.State s = STATES.get(world);
+      if (s == null && create) {
+         s = new BlueprintSelection.State();
+         STATES.put(world, s);
+      }
+
+      return s;
    }
 
    public static void setCornerA(World world, int x, int y, int z) {

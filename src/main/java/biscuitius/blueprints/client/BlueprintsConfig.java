@@ -42,8 +42,8 @@ public final class BlueprintsConfig {
                if (root.has("hologramPassthrough")) {
                   DesignModeState.setPassthroughMode(root.get("hologramPassthrough").getAsBoolean());
                }
-            } catch (Exception var15) {
-               LOGGER.warn("Failed to load config from {}: {}", file.getPath(), var15.getMessage());
+            } catch (Exception e) {
+               LOGGER.warn("Failed to load config from {}: {}", file.getPath(), e.getMessage());
             }
          }
       }
@@ -61,7 +61,7 @@ public final class BlueprintsConfig {
             if (file.exists()) {
                try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
                   root = new JsonParser().parse(reader).getAsJsonObject();
-               } catch (Exception var37) {
+               } catch (Exception e) {
                   root = new JsonObject();
                }
             } else {
@@ -88,8 +88,8 @@ public final class BlueprintsConfig {
                }
 
                writer.write("}\n");
-            } catch (Exception var35) {
-               LOGGER.warn("Failed to save config to {}: {}", file.getPath(), var35.getMessage());
+            } catch (Exception e) {
+               LOGGER.warn("Failed to save config to {}: {}", file.getPath(), e.getMessage());
             }
          }
       }

@@ -128,12 +128,12 @@ public final class HologramCache implements HologramListener {
                            out.writeInt(z);
                            out.writeShort((short)h.blockId);
                            out.writeShort((short)h.metadata);
-                        } catch (Exception var6x) {
-                           throw new RuntimeException(var6x);
+                        } catch (Exception ex) {
+                           throw new RuntimeException(ex);
                         }
                      });
-                  } catch (Exception var21) {
-                     LOGGER.warn("Failed to write hologram cache {}: {}", file, var21.getMessage());
+                  } catch (Exception e) {
+                     LOGGER.warn("Failed to write hologram cache {}: {}", file, e.getMessage());
                      file.delete();
                   }
                }
@@ -175,8 +175,8 @@ public final class HologramCache implements HologramListener {
                   }
                }
             }
-         } catch (Exception var29) {
-            LOGGER.warn("Failed to load hologram cache {}: {}", file, var29.getMessage());
+         } catch (Exception e) {
+            LOGGER.warn("Failed to load hologram cache {}: {}", file, e.getMessage());
          }
       }
    }
@@ -184,18 +184,18 @@ public final class HologramCache implements HologramListener {
    private static String scopeFor(Minecraft mc) {
       if (mc == null) {
          return null;
-      } else {
-         if (mc.currentWorld != null && mc.currentWorld.saveHandler != null) {
-            String dir = readWorldDirName(mc.currentWorld.saveHandler);
-            if (dir != null && !dir.isEmpty()) {
-               return "sp_" + sanitise(dir);
-            }
-         }
-
-         MinecraftAccessor acc = (MinecraftAccessor)mc;
-         String server = acc.getServerName();
-         return server != null && !server.isEmpty() ? "mp_" + sanitise(server) + "_" + acc.getServerPort() : null;
       }
+
+      if (mc.currentWorld != null && mc.currentWorld.saveHandler != null) {
+         String dir = readWorldDirName(mc.currentWorld.saveHandler);
+         if (dir != null && !dir.isEmpty()) {
+            return "sp_" + sanitise(dir);
+         }
+      }
+
+      MinecraftAccessor acc = (MinecraftAccessor)mc;
+      String server = acc.getServerName();
+      return server != null && !server.isEmpty() ? "mp_" + sanitise(server) + "_" + acc.getServerPort() : null;
    }
 
    private static String readWorldDirName(Object saveHandler) {
@@ -207,9 +207,9 @@ public final class HologramCache implements HologramListener {
             f.setAccessible(true);
             Object v = f.get(saveHandler);
             return v == null ? null : v.toString();
-         } catch (NoSuchFieldException var4) {
+         } catch (NoSuchFieldException ignored) {
             c = c.getSuperclass();
-         } catch (Exception var5) {
+         } catch (Exception e) {
             return null;
          }
       }
@@ -225,10 +225,10 @@ public final class HologramCache implements HologramListener {
       Minecraft mc = Minecraft.getMinecraft();
       if (mc == null) {
          return null;
-      } else {
-         File root = new File(mc.getMinecraftDir(), "blueprints");
-         File cacheDir = new File(new File(root, "cache"), scope);
-         return new File(cacheDir, "dim_" + dimensionId + ".cache");
       }
+
+      File root = new File(mc.getMinecraftDir(), "blueprints");
+      File cacheDir = new File(new File(root, "cache"), scope);
+      return new File(cacheDir, "dim_" + dimensionId + ".cache");
    }
 }

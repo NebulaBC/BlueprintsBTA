@@ -1,6 +1,7 @@
 package biscuitius.blueprints.mixin.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.Timer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
@@ -20,4 +21,7 @@ public interface MinecraftAccessor {
 
    @Accessor("serverPort")
    int getServerPort();
+
+   @Accessor("timer")
+   Timer getTimer();
 }

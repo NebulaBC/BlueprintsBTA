@@ -25,20 +25,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MinecraftMixin {
    @Inject(method = "runTick", at = @At("HEAD"))
    private void blueprints$syncDesignModePlayer(CallbackInfo ci) {
-      DesignModeState.syncPlayer(Minecraft.getMinecraft());
-      Minecraft mc = Minecraft.getMinecraft();
+      DesignModeState.syncPlayer((Minecraft)(Object)this);
+      Minecraft mc = (Minecraft)(Object)this;
       HologramCache.tick(mc);
       PrinterMode.tick(mc);
    }
 
    @Inject(method = "runTick", at = @At("RETURN"))
    private void blueprints$tickDesignModePlayer(CallbackInfo ci) {
-      DesignModeState.tickDesignPlayer(Minecraft.getMinecraft());
+      DesignModeState.tickDesignPlayer((Minecraft)(Object)this);
    }
 
    @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IZ)V"))
    private void blueprints$routeKeyEventsToDesignPlayer(PlayerInput input, int keyCode, boolean pressed) {
-      Minecraft minecraft = Minecraft.getMinecraft();
+      Minecraft minecraft = (Minecraft)(Object)this;
       if (!DesignModeState.isActive() || minecraft.currentScreen == null) {
          PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
          if (DesignModeState.isActive() && controlPlayer != null && controlPlayer.input != null) {
@@ -54,7 +54,7 @@ public abstract class MinecraftMixin {
       at = @At(value = "INVOKE", target = "Lnet/minecraft/core/player/inventory/container/ContainerInventory;changeCurrentItem(I)V")
    )
    private void blueprints$routeScrollToDesignPlayer(ContainerInventory inventory, int scrollDelta) {
-      Minecraft minecraft = Minecraft.getMinecraft();
+      Minecraft minecraft = (Minecraft)(Object)this;
       PlayerLocal controlPlayer = DesignModeState.getControlPlayer(minecraft);
       if (DesignModeState.isActive() && controlPlayer != null) {
          controlPlayer.inventory.changeCurrentItem(scrollDelta);
@@ -140,7 +140,7 @@ public abstract class MinecraftMixin {
 
    @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/input/PlayerInput;keyEvent(IZ)V", shift = Shift.AFTER))
    private void blueprints$handleDesignModeToggle(CallbackInfo ci) {
-      Minecraft mc = Minecraft.getMinecraft();
+      Minecraft mc = (Minecraft)(Object)this;
       DesignModeState.handleKeyPress(mc);
       PrinterMode.handleKeyEvent(mc);
       if (DesignModeState.MENU_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
@@ -154,7 +154,7 @@ public abstract class MinecraftMixin {
 
    @Redirect(method = "run", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/sound/SoundEngine;updateListener(Lnet/minecraft/core/entity/Mob;F)V"))
    private void blueprints$routeSoundListener(SoundEngine engine, Mob player, float partialTick) {
-      Minecraft mc = Minecraft.getMinecraft();
+      Minecraft mc = (Minecraft)(Object)this;
       Mob listener = (Mob)(DesignModeState.isActive() ? DesignModeState.getDesignPlayer() : player);
       engine.updateListener(listener != null ? listener : player, partialTick);
    }

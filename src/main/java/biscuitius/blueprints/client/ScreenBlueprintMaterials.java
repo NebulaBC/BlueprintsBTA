@@ -105,18 +105,18 @@ public final class ScreenBlueprintMaterials extends Screen {
       ItemStack[] drops;
       try {
          drops = block.getBreakResult(this_world(), EnumDropCause.PICK_BLOCK, x, y, z, metadata, null);
-      } catch (Throwable var8) {
+      } catch (Throwable t) {
          drops = null;
       }
 
       if (drops != null && drops.length > 0 && drops[0] != null) {
          return drops[0];
-      } else {
-         try {
-            return new ItemStack(block, 1, metadata);
-         } catch (Throwable var7) {
-            return null;
-         }
+      }
+
+      try {
+         return new ItemStack(block, 1, metadata);
+      } catch (Throwable t) {
+         return null;
       }
    }
 
@@ -128,22 +128,22 @@ public final class ScreenBlueprintMaterials extends Screen {
    private static String formatCount(int n) {
       if (n < 1000) {
          return Integer.toString(n);
-      } else {
-         StringBuilder sb = new StringBuilder();
-         String s = Integer.toString(n);
-         int firstGroup = s.length() % 3;
-         if (firstGroup == 0) {
-            firstGroup = 3;
-         }
-
-         sb.append(s, 0, firstGroup);
-
-         for (int i = firstGroup; i < s.length(); i += 3) {
-            sb.append(',').append(s, i, i + 3);
-         }
-
-         return sb.toString();
       }
+
+      StringBuilder sb = new StringBuilder();
+      String s = Integer.toString(n);
+      int firstGroup = s.length() % 3;
+      if (firstGroup == 0) {
+         firstGroup = 3;
+      }
+
+      sb.append(s, 0, firstGroup);
+
+      for (int i = firstGroup; i < s.length(); i += 3) {
+         sb.append(',').append(s, i, i + 3);
+      }
+
+      return sb.toString();
    }
 
    private static final class Material {
@@ -218,7 +218,7 @@ public final class ScreenBlueprintMaterials extends Screen {
          try {
             String n = stack.getDisplayName();
             return n == null ? "Unknown" : n;
-         } catch (Throwable var3) {
+         } catch (Throwable t) {
             return "Unknown";
          }
       }

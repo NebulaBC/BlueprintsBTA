@@ -318,7 +318,7 @@ public final class ScreenBlueprintBrowser extends Screen {
       }
    }
 
-   public static enum Mode {
+   public enum Mode {
       SAVE,
       LOAD,
       CREATE_FROM_SELECTION;

@@ -27,7 +27,7 @@ public abstract class DesignModeClickMixin {
    @Inject(method = "clickMouse", at = @At("HEAD"), cancellable = true)
    private void blueprints$handleDesignModeClick(int clickType, boolean attack, boolean repeat, CallbackInfo ci) {
       if (DesignModeState.isActive()) {
-         Minecraft mc = Minecraft.getMinecraft();
+         Minecraft mc = (Minecraft)(Object)this;
          if (mc.currentWorld != null) {
             PlayerLocal designPlayer = DesignModeState.getDesignPlayer();
             if (designPlayer != null) {

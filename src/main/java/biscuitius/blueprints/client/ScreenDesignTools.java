@@ -2,6 +2,7 @@ package biscuitius.blueprints.client;
 
 import biscuitius.blueprints.client.hologram.BlueprintTransform;
 import biscuitius.blueprints.client.hologram.HologramAppearance;
+import biscuitius.blueprints.client.hologram.HologramController;
 import biscuitius.blueprints.client.hologram.HologramRenderer;
 import biscuitius.blueprints.client.hologram.HologramStore;
 import net.minecraft.client.Minecraft;
@@ -10,6 +11,7 @@ import net.minecraft.client.gui.ButtonElement;
 import net.minecraft.client.gui.Screen;
 import net.minecraft.client.gui.SliderElement;
 import net.minecraft.client.input.InputDevice;
+import net.minecraft.core.player.gamemode.Gamemode;
 import net.minecraft.core.world.World;
 
 public final class ScreenDesignTools extends Screen {
@@ -33,6 +35,7 @@ public final class ScreenDesignTools extends Screen {
    private static final int ID_ROTATE_CW = 17;
    private static final int ID_FLIP = 18;
    private static final int ID_MATERIALS = 19;
+   private static final int ID_PASTE = 20;
    private static final int BTN_WIDTH = 240;
    private static final int BTN_HEIGHT = 20;
    private static final int GAP = 4;
@@ -50,15 +53,27 @@ public final class ScreenDesignTools extends Screen {
    private static int getTotalLayers(World world) {
       if (world == null) {
          return 0;
+      }
+
+      int[] range = HologramStore.getYRange(world);
+      return range == null ? 0 : range[1] - range[0] + 1;
+   }
+
+   private static boolean shouldShowPasteButton() {
+      Minecraft mc = Minecraft.getMinecraft();
+      if (mc == null || mc.currentWorld == null || mc.thePlayer == null) {
+         return false;
+      } else if (mc.isMultiplayerWorld()) {
+         return false;
       } else {
-         int[] range = HologramStore.getYRange(world);
-         return range == null ? 0 : range[1] - range[0] + 1;
+         return mc.thePlayer.getGamemode() != Gamemode.creative ? false : HologramStore.hasEntries(mc.currentWorld);
       }
    }
 
    public void init() {
       int cx = this.width / 2;
-      int rowCount = 8;
+      boolean showPaste = shouldShowPasteButton();
+      int rowCount = showPaste ? 9 : 8;
       int totalHeight = rowCount * 20 + (rowCount - 1) * 4;
       int top = this.height / 2 - (totalHeight + 12) / 2 + 12;
       this.titleY = top - 12;
@@ -113,6 +128,11 @@ public final class ScreenDesignTools extends Screen {
       this.buttons.add(new ButtonElement(16, leftCol, top, 77, 20, "← Rotate"));
       this.buttons.add(new ButtonElement(18, midCol3, top, 77, 20, "Flip"));
       this.buttons.add(new ButtonElement(17, rightCol3, top, 77, 20, "Rotate →"));
+      if (showPaste) {
+         top += 24;
+         this.buttons.add(new ButtonElement(20, leftCol, top, 240, 20, "Paste Blueprint"));
+      }
+
       this.prevHue = hue;
       this.prevOpacity = opacity;
       this.prevSaturation = sat;
@@ -140,6 +160,11 @@ public final class ScreenDesignTools extends Screen {
          button.displayString = DesignModeState.isPassthroughMode() ? "Interact: Passthrough" : "Interact: Fulfill";
       } else if (button.id == 19) {
          this.mc.displayScreen(new ScreenBlueprintMaterials(this));
+      } else if (button.id == 20) {
+         if (mc != null) {
+            HologramController.pasteBlueprint(mc);
+            this.mc.displayScreen(null);
+         }
       } else if (button.id == 17) {
          if (mc != null && mc.currentWorld != null) {
             BlueprintTransform.rotate(mc.currentWorld, BlueprintTransform.Rotation.CW);

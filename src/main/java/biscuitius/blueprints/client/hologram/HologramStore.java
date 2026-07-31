@@ -209,56 +209,60 @@ public final class HologramStore {
    public static HologramBlock put(World world, int x, int y, int z, HologramBlock block) {
       if (world == null || y < 0 || y >= 256) {
          return null;
-      } else if (block == null) {
-         return remove(world, x, y, z);
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.computeIfAbsent(world, w -> new HashMap<>());
-         long key = packPos(x, y, z);
-         HologramBlock previous = worldBlocks.put(key, block);
-         if (previous == null) {
-            addSectionRef(world, x, y, z);
-         }
-
-         expandStickyBounds(world, x, y, z);
-         fireChanged(world, x, y, z, previous, block);
-         return previous;
       }
+
+      if (block == null) {
+         return remove(world, x, y, z);
+      }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.computeIfAbsent(world, w -> new HashMap<>());
+      long key = packPos(x, y, z);
+      HologramBlock previous = worldBlocks.put(key, block);
+      if (previous == null) {
+         addSectionRef(world, x, y, z);
+      }
+
+      expandStickyBounds(world, x, y, z);
+      fireChanged(world, x, y, z, previous, block);
+      return previous;
    }
 
    public static HologramBlock remove(World world, int x, int y, int z) {
       if (world == null) {
          return null;
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         if (worldBlocks == null) {
-            return null;
-         } else {
-            long key = packPos(x, y, z);
-            HologramBlock previous = worldBlocks.remove(key);
-            if (previous == null) {
-               return null;
-            } else {
-               removeSectionRef(world, x, y, z);
-               if (worldBlocks.isEmpty()) {
-                  BLOCKS_BY_WORLD.remove(world);
-               }
-
-               fireChanged(world, x, y, z, previous, null);
-               return previous;
-            }
-         }
       }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      if (worldBlocks == null) {
+         return null;
+      }
+
+      long key = packPos(x, y, z);
+      HologramBlock previous = worldBlocks.remove(key);
+      if (previous == null) {
+         return null;
+      }
+
+      removeSectionRef(world, x, y, z);
+      if (worldBlocks.isEmpty()) {
+         BLOCKS_BY_WORLD.remove(world);
+      }
+
+      fireChanged(world, x, y, z, previous, null);
+      return previous;
    }
 
    public static HologramBlock get(World world, int x, int y, int z) {
       if (world == null) {
          return null;
-      } else if (!hasSectionHolograms(world, x, y, z)) {
-         return null;
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         return worldBlocks == null ? null : worldBlocks.get(packPos(x, y, z));
       }
+
+      if (!hasSectionHolograms(world, x, y, z)) {
+         return null;
+      }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      return worldBlocks == null ? null : worldBlocks.get(packPos(x, y, z));
    }
 
    public static boolean contains(World world, int x, int y, int z) {
@@ -301,14 +305,14 @@ public final class HologramStore {
                   BLOCKS_BY_WORLD.remove(world);
                }
             } else {
-               Map<Long, HologramBlock> worldBlocksx = BLOCKS_BY_WORLD.computeIfAbsent(world, w -> new HashMap<>());
+               Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.computeIfAbsent(world, w -> new HashMap<>());
 
                for (int x = minX; x <= maxX; x++) {
                   for (int z = minZ; z <= maxZ; z++) {
-                     for (int yx = minY; yx <= maxY; yx++) {
-                        long key = packPos(x, yx, z);
-                        if (worldBlocksx.put(key, block) == null) {
-                           addSectionRef(world, x, yx, z);
+                     for (int y = minY; y <= maxY; y++) {
+                        long key = packPos(x, y, z);
+                        if (worldBlocks.put(key, block) == null) {
+                           addSectionRef(world, x, y, z);
                         }
                      }
                   }
@@ -431,54 +435,54 @@ public final class HologramStore {
    public static boolean hasEntries(World world) {
       if (world == null) {
          return false;
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         return worldBlocks != null && !worldBlocks.isEmpty();
       }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      return worldBlocks != null && !worldBlocks.isEmpty();
    }
 
    public static int size(World world) {
       if (world == null) {
          return 0;
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         return worldBlocks == null ? 0 : worldBlocks.size();
       }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      return worldBlocks == null ? 0 : worldBlocks.size();
    }
 
    public static int[] getBounds(World world) {
       if (world == null) {
          return null;
-      } else {
-         int[] b = STICKY_BOUNDS.get(world);
-         return b == null ? null : new int[]{b[0], b[1], b[2], b[3], b[4], b[5]};
       }
+
+      int[] b = STICKY_BOUNDS.get(world);
+      return b == null ? null : new int[]{b[0], b[1], b[2], b[3], b[4], b[5]};
    }
 
    public static int[] getYRange(World world) {
       if (world == null) {
          return null;
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         if (worldBlocks != null && !worldBlocks.isEmpty()) {
-            int minY = Integer.MAX_VALUE;
-            int maxY = Integer.MIN_VALUE;
+      }
 
-            for (long packed : worldBlocks.keySet()) {
-               int py = unpackY(packed);
-               if (py < minY) {
-                  minY = py;
-               }
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      if (worldBlocks != null && !worldBlocks.isEmpty()) {
+         int minY = Integer.MAX_VALUE;
+         int maxY = Integer.MIN_VALUE;
 
-               if (py > maxY) {
-                  maxY = py;
-               }
+         for (long packed : worldBlocks.keySet()) {
+            int py = unpackY(packed);
+            if (py < minY) {
+               minY = py;
             }
 
-            return new int[]{minY, maxY};
-         } else {
-            return null;
+            if (py > maxY) {
+               maxY = py;
+            }
          }
+
+         return new int[]{minY, maxY};
+      } else {
+         return null;
       }
    }
 
@@ -497,10 +501,10 @@ public final class HologramStore {
    public static Map<Long, HologramBlock> rawView(World world) {
       if (world == null) {
          return Collections.emptyMap();
-      } else {
-         Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
-         return worldBlocks == null ? Collections.emptyMap() : Collections.unmodifiableMap(worldBlocks);
       }
+
+      Map<Long, HologramBlock> worldBlocks = BLOCKS_BY_WORLD.get(world);
+      return worldBlocks == null ? Collections.emptyMap() : Collections.unmodifiableMap(worldBlocks);
    }
 
    @FunctionalInterface

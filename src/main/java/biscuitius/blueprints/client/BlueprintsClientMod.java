@@ -26,20 +26,19 @@ public class BlueprintsClientMod implements ClientModInitializer {
 
    private static void loadTranslations() {
       try (InputStream in = BlueprintsClientMod.class.getResourceAsStream("/assets/blueprints/lang/en_US.lang")) {
-         if (in == null) {
+         if (in != null) {
+            Properties modEntries = new Properties();
+            modEntries.load(new InputStreamReader(in, StandardCharsets.UTF_8));
+            Field entriesField = Language.class.getDeclaredField("entries");
+            entriesField.setAccessible(true);
+            Properties defaultEntries = (Properties)entriesField.get(Default.INSTANCE);
+            defaultEntries.putAll(modEntries);
+            LOGGER.info("Loaded {} translation key(s) from blueprints.lang", modEntries.size());
+         } else {
             LOGGER.warn("Could not find /assets/blueprints/lang/en_US.lang on classpath");
-            return;
          }
-
-         Properties modEntries = new Properties();
-         modEntries.load(new InputStreamReader(in, StandardCharsets.UTF_8));
-         Field entriesField = Language.class.getDeclaredField("entries");
-         entriesField.setAccessible(true);
-         Properties defaultEntries = (Properties)entriesField.get(Default.INSTANCE);
-         defaultEntries.putAll(modEntries);
-         LOGGER.info("Loaded {} translation key(s) from blueprints.lang", modEntries.size());
-      } catch (Exception var16) {
-         LOGGER.error("Failed to load Blueprints translations", var16);
+      } catch (Exception e) {
+         LOGGER.error("Failed to load Blueprints translations", e);
       }
    }
 }

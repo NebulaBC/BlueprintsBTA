@@ -1,5 +1,7 @@
 package biscuitius.blueprints.client.hologram;
 
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.PlayerLocalMultiplayer;
 import net.minecraft.client.net.handler.PacketHandlerClient;
@@ -18,6 +20,8 @@ import net.minecraft.core.item.ItemSign;
 import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.item.block.ItemBlock;
 import net.minecraft.core.net.packet.PacketMovePlayer.Rot;
+import net.minecraft.core.player.gamemode.Gamemode;
+import net.minecraft.core.player.inventory.container.ContainerInventory;
 import net.minecraft.core.util.helper.Side;
 import net.minecraft.core.util.phys.AABB;
 import net.minecraft.core.util.phys.HitResult;
@@ -37,37 +41,39 @@ public final class HologramController {
          Item item = stack.getItem();
          if (item == null) {
             return false;
-         } else if (!isPlacementItem(item)) {
+         }
+
+         if (!isPlacementItem(item)) {
             return false;
-         } else {
-            HologramPlacementContext.begin(world);
+         }
 
-            try {
-               return item.onUseItemOnBlock(stack, player, world, x, y, z, side, xHit, yHit);
-            } catch (Throwable var21) {
-               if (item instanceof ItemBlock) {
-                  Block<?> block = ((ItemBlock)item).getBlock();
-                  if (block != null) {
-                     int tx = x;
-                     int ty = y;
-                     int tz = z;
-                     if (!isReplaceable(world, x, y, z)) {
-                        tx = x + side.getOffsetX();
-                        ty = y + side.getOffsetY();
-                        tz = z + side.getOffsetZ();
-                     }
+         HologramPlacementContext.begin(world);
 
-                     if (ty >= 0 && ty < world.getHeightBlocks() && isReplaceable(world, tx, ty, tz)) {
-                        HologramStore.put(world, tx, ty, tz, new HologramBlock(block.id(), stack.getMetadata()));
-                        return true;
-                     }
+         try {
+            return item.onUseItemOnBlock(stack, player, world, x, y, z, side, xHit, yHit);
+         } catch (Throwable t) {
+            if (item instanceof ItemBlock) {
+               Block<?> block = ((ItemBlock)item).getBlock();
+               if (block != null) {
+                  int tx = x;
+                  int ty = y;
+                  int tz = z;
+                  if (!isReplaceable(world, x, y, z)) {
+                     tx += side.getOffsetX();
+                     ty += side.getOffsetY();
+                     tz += side.getOffsetZ();
+                  }
+
+                  if (ty >= 0 && ty < world.getHeightBlocks() && isReplaceable(world, tx, ty, tz)) {
+                     HologramStore.put(world, tx, ty, tz, new HologramBlock(block.id(), stack.getMetadata()));
+                     return true;
                   }
                }
-
-               return false;
-            } finally {
-               HologramPlacementContext.end();
             }
+
+            return false;
+         } finally {
+            HologramPlacementContext.end();
          }
       } else {
          return false;
@@ -89,25 +95,25 @@ public final class HologramController {
       HologramBlock h = HologramStore.get(world, x, y, z);
       if (h == null) {
          return world.canPlaceInsideBlock(x, y, z);
-      } else {
-         Block<?> b = Blocks.blocksList[h.blockId];
-         return b == null || b.getMaterial().isReplaceable();
       }
+
+      Block<?> b = Blocks.blocksList[h.blockId];
+      return b == null || b.getMaterial().isReplaceable();
    }
 
    public static HologramBlock tryBreak(World world, int x, int y, int z) {
       if (world == null) {
          return null;
-      } else {
-         HologramBlock removed = HologramStore.remove(world, x, y, z);
-         if (removed == null) {
-            return null;
-         } else {
-            removeLinkedPart(world, x, y, z, removed);
-            HologramStore.recomputeBounds(world);
-            return removed;
-         }
       }
+
+      HologramBlock removed = HologramStore.remove(world, x, y, z);
+      if (removed == null) {
+         return null;
+      }
+
+      removeLinkedPart(world, x, y, z, removed);
+      HologramStore.recomputeBounds(world);
+      return removed;
    }
 
    private static void removeLinkedPart(World world, int x, int y, int z, HologramBlock removed) {
@@ -144,58 +150,58 @@ public final class HologramController {
          HologramBlock h = HologramStore.get(mc.currentWorld, hx, hy, hz);
          if (h == null) {
             return false;
-         } else {
-            Block<?> block = Blocks.blocksList[h.blockId];
-            if (block == null) {
-               return false;
-            } else {
-               ItemStack[] pick;
-               try {
-                  pick = block.getBreakResult(mc.currentWorld, EnumDropCause.PICK_BLOCK, hx, hy, hz, h.metadata, null);
-               } catch (Throwable var22) {
-                  pick = null;
-               }
+         }
 
-               if (pick != null && pick.length != 0 && pick[0] != null) {
-                  ItemStack want = pick[0];
-                  if (held.itemID == want.itemID && held.getMetadata() == want.getMetadata()) {
-                     Side[] sides = Side.values();
+         Block<?> block = Blocks.blocksList[h.blockId];
+         if (block == null) {
+            return false;
+         }
 
-                     for (Side s : sides) {
-                        if (s != Side.NONE) {
-                           int nx = hx - s.getOffsetX();
-                           int ny = hy - s.getOffsetY();
-                           int nz = hz - s.getOffsetZ();
-                           if (ny >= 0 && ny < mc.currentWorld.getHeightBlocks()) {
-                              int id = mc.currentWorld.getBlockId(nx, ny, nz);
-                              if (id != 0) {
-                                 Block<?> neighbour = Blocks.blocksList[id];
-                                 if (neighbour != null && !neighbour.getMaterial().isReplaceable()) {
-                                    HologramController.ForcedRotation forced = findRotationForMeta(
-                                       player, held, mc.currentWorld, nx, ny, nz, s, hx, hy, hz, h.metadata
-                                    );
-                                    if (forced != null) {
-                                       boolean placed = placeWithRotation(mc, player, held, nx, ny, nz, s, forced.xHit, forced.yHit, forced.yaw, forced.pitch);
-                                       if (placed) {
-                                          HologramStore.remove(mc.currentWorld, hx, hy, hz);
-                                       }
+         ItemStack[] pick;
+         try {
+            pick = block.getBreakResult(mc.currentWorld, EnumDropCause.PICK_BLOCK, hx, hy, hz, h.metadata, null);
+         } catch (Throwable t) {
+            pick = null;
+         }
 
-                                       return placed;
-                                    }
+         if (pick != null && pick.length != 0 && pick[0] != null) {
+            ItemStack want = pick[0];
+            if (held.itemID == want.itemID && held.getMetadata() == want.getMetadata()) {
+               Side[] sides = Side.values();
+
+               for (Side s : sides) {
+                  if (s != Side.NONE) {
+                     int nx = hx - s.getOffsetX();
+                     int ny = hy - s.getOffsetY();
+                     int nz = hz - s.getOffsetZ();
+                     if (ny >= 0 && ny < mc.currentWorld.getHeightBlocks()) {
+                        int id = mc.currentWorld.getBlockId(nx, ny, nz);
+                        if (id != 0) {
+                           Block<?> neighbour = Blocks.blocksList[id];
+                           if (neighbour != null && !neighbour.getMaterial().isReplaceable()) {
+                              HologramController.ForcedRotation forced = findRotationForMeta(
+                                 player, held, mc.currentWorld, nx, ny, nz, s, hx, hy, hz, h.metadata
+                              );
+                              if (forced != null) {
+                                 boolean placed = placeWithRotation(mc, player, held, nx, ny, nz, s, forced.xHit, forced.yHit, forced.yaw, forced.pitch);
+                                 if (placed) {
+                                    HologramStore.remove(mc.currentWorld, hx, hy, hz);
                                  }
+
+                                 return placed;
                               }
                            }
                         }
                      }
-
-                     return false;
-                  } else {
-                     return false;
                   }
-               } else {
-                  return false;
                }
+
+               return false;
+            } else {
+               return false;
             }
+         } else {
+            return false;
          }
       } else {
          return false;
@@ -221,12 +227,12 @@ public final class HologramController {
                }
             }
          }
-
-         return null;
       } finally {
          player.yRot = origYaw;
          player.xRot = origPitch;
       }
+
+      return null;
    }
 
    private static Integer dryRunMetadata(
@@ -235,30 +241,27 @@ public final class HologramController {
       Item item = stack.getItem();
       if (item == null) {
          return null;
-      } else {
-         ItemStack copy = stack.copy();
-         HologramPlacementContext.beginDryRun(world);
+      }
 
-         Object captured;
+      ItemStack copy = stack.copy();
+      HologramPlacementContext.beginDryRun(world);
+
+      try {
+         boolean ok;
          try {
-            boolean ok;
-            try {
-               ok = item.onUseItemOnBlock(copy, player, world, anchorX, anchorY, anchorZ, side, xHit, yHit);
-            } catch (Throwable var22) {
-               return null;
-            }
-
-            if (ok) {
-               int[] capturedx = HologramPlacementContext.captureRead(tx, ty, tz);
-               return capturedx != null ? capturedx[1] : null;
-            }
-
-            captured = null;
-         } finally {
-            HologramPlacementContext.end();
+            ok = item.onUseItemOnBlock(copy, player, world, anchorX, anchorY, anchorZ, side, xHit, yHit);
+         } catch (Throwable t) {
+            return null;
          }
 
-         return (Integer)captured;
+         if (!ok) {
+            return null;
+         }
+
+         int[] captured = HologramPlacementContext.captureRead(tx, ty, tz);
+         return captured != null ? captured[1] : null;
+      } finally {
+         HologramPlacementContext.end();
       }
    }
 
@@ -280,7 +283,6 @@ public final class HologramController {
       float origPitch = player.xRot;
       boolean onGround = player.onGround;
 
-      boolean var18;
       try {
          if (sendQueue != null) {
             sendQueue.addToSendQueue(new Rot(forcedYaw, forcedPitch, onGround));
@@ -288,8 +290,7 @@ public final class HologramController {
 
          player.yRot = forcedYaw;
          player.xRot = forcedPitch;
-         boolean placed = mc.playerController.placeItemStackOnTile(player, mc.currentWorld, held, anchorX, anchorY, anchorZ, side, xHit, yHit);
-         var18 = placed;
+         return mc.playerController.placeItemStackOnTile(player, mc.currentWorld, held, anchorX, anchorY, anchorZ, side, xHit, yHit);
       } finally {
          player.yRot = origYaw;
          player.xRot = origPitch;
@@ -297,88 +298,88 @@ public final class HologramController {
             sendQueue.addToSendQueue(new Rot(origYaw, origPitch, onGround));
          }
       }
-
-      return var18;
    }
 
    public static HitResult pickHologramOverlay(World world, Vec3 start, Vec3 end, HitResult realHit) {
       if (world == null || start == null || end == null) {
          return realHit;
-      } else if (!HologramStore.hasEntries(world)) {
+      }
+
+      if (!HologramStore.hasEntries(world)) {
          return realHit;
-      } else {
-         double dx = end.x - start.x;
-         double dy = end.y - start.y;
-         double dz = end.z - start.z;
-         double segLenSq = dx * dx + dy * dy + dz * dz;
-         if (segLenSq <= 0.0) {
-            return realHit;
-         } else {
-            double maxDistSq = realHit == null ? segLenSq : sqDist(start, realHit.location);
-            int bx = floor(start.x);
-            int by = floor(start.y);
-            int bz = floor(start.z);
-            int stepX = dx > 0.0 ? 1 : (dx < 0.0 ? -1 : 0);
-            int stepY = dy > 0.0 ? 1 : (dy < 0.0 ? -1 : 0);
-            int stepZ = dz > 0.0 ? 1 : (dz < 0.0 ? -1 : 0);
-            double tMaxX = stepX == 0 ? Double.POSITIVE_INFINITY : ((stepX > 0 ? bx + 1 : bx) - start.x) / dx;
-            double tMaxY = stepY == 0 ? Double.POSITIVE_INFINITY : ((stepY > 0 ? by + 1 : by) - start.y) / dy;
-            double tMaxZ = stepZ == 0 ? Double.POSITIVE_INFINITY : ((stepZ > 0 ? bz + 1 : bz) - start.z) / dz;
-            double tDeltaX = stepX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dx);
-            double tDeltaY = stepY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dy);
-            double tDeltaZ = stepZ == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dz);
-            HitResult best = null;
-            double bestSqDist = maxDistSq;
-            int maxSteps = 256;
+      }
 
-            for (int i = 0; i <= maxSteps; i++) {
-               if (HologramStore.hasSectionHolograms(world, bx, by, bz)) {
-                  HologramBlock h = HologramStore.get(world, bx, by, bz);
-                  if (h != null && HologramAppearance.isYVisible(by)) {
-                     HitResult candidate = rayTraceHologram(world, bx, by, bz, h, start, end);
-                     if (candidate != null) {
-                        double sqd = sqDist(start, candidate.location);
-                        if (sqd < bestSqDist) {
-                           return candidate;
-                        }
-                     }
+      double dx = end.x - start.x;
+      double dy = end.y - start.y;
+      double dz = end.z - start.z;
+      double segLenSq = dx * dx + dy * dy + dz * dz;
+      if (segLenSq <= 0.0) {
+         return realHit;
+      }
+
+      double maxDistSq = realHit == null ? segLenSq : sqDist(start, realHit.location);
+      int bx = floor(start.x);
+      int by = floor(start.y);
+      int bz = floor(start.z);
+      int stepX = dx > 0.0 ? 1 : (dx < 0.0 ? -1 : 0);
+      int stepY = dy > 0.0 ? 1 : (dy < 0.0 ? -1 : 0);
+      int stepZ = dz > 0.0 ? 1 : (dz < 0.0 ? -1 : 0);
+      double tMaxX = stepX == 0 ? Double.POSITIVE_INFINITY : ((stepX > 0 ? bx + 1 : bx) - start.x) / dx;
+      double tMaxY = stepY == 0 ? Double.POSITIVE_INFINITY : ((stepY > 0 ? by + 1 : by) - start.y) / dy;
+      double tMaxZ = stepZ == 0 ? Double.POSITIVE_INFINITY : ((stepZ > 0 ? bz + 1 : bz) - start.z) / dz;
+      double tDeltaX = stepX == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dx);
+      double tDeltaY = stepY == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dy);
+      double tDeltaZ = stepZ == 0 ? Double.POSITIVE_INFINITY : Math.abs(1.0 / dz);
+      HitResult best = null;
+      double bestSqDist = maxDistSq;
+      int maxSteps = 256;
+
+      for (int i = 0; i <= maxSteps; i++) {
+         if (HologramStore.hasSectionHolograms(world, bx, by, bz)) {
+            HologramBlock h = HologramStore.get(world, bx, by, bz);
+            if (h != null && HologramAppearance.isYVisible(by)) {
+               HitResult candidate = rayTraceHologram(world, bx, by, bz, h, start, end);
+               if (candidate != null) {
+                  double sqd = sqDist(start, candidate.location);
+                  if (sqd < bestSqDist) {
+                     return candidate;
                   }
-               }
-
-               double tNext;
-               if (tMaxX < tMaxY) {
-                  if (tMaxX < tMaxZ) {
-                     tNext = tMaxX;
-                     bx += stepX;
-                     tMaxX += tDeltaX;
-                  } else {
-                     tNext = tMaxZ;
-                     bz += stepZ;
-                     tMaxZ += tDeltaZ;
-                  }
-               } else if (tMaxY < tMaxZ) {
-                  tNext = tMaxY;
-                  by += stepY;
-                  tMaxY += tDeltaY;
-               } else {
-                  tNext = tMaxZ;
-                  bz += stepZ;
-                  tMaxZ += tDeltaZ;
-               }
-
-               if (tNext > 1.0) {
-                  break;
-               }
-
-               double walkedSq = dx * tNext * (dx * tNext) + dy * tNext * (dy * tNext) + dz * tNext * (dz * tNext);
-               if (walkedSq > bestSqDist) {
-                  break;
                }
             }
+         }
 
-            return best != null ? best : realHit;
+         double tNext;
+         if (tMaxX < tMaxY) {
+            if (tMaxX < tMaxZ) {
+               tNext = tMaxX;
+               bx += stepX;
+               tMaxX += tDeltaX;
+            } else {
+               tNext = tMaxZ;
+               bz += stepZ;
+               tMaxZ += tDeltaZ;
+            }
+         } else if (tMaxY < tMaxZ) {
+            tNext = tMaxY;
+            by += stepY;
+            tMaxY += tDeltaY;
+         } else {
+            tNext = tMaxZ;
+            bz += stepZ;
+            tMaxZ += tDeltaZ;
+         }
+
+         if (tNext > 1.0) {
+            break;
+         }
+
+         double walkedSq = dx * tNext * (dx * tNext) + dy * tNext * (dy * tNext) + dz * tNext * (dz * tNext);
+         if (walkedSq > bestSqDist) {
+            break;
          }
       }
+
+      return best != null ? best : realHit;
    }
 
    private static HitResult rayTraceHologram(World world, int x, int y, int z, HologramBlock h, Vec3 start, Vec3 end) {
@@ -388,51 +389,45 @@ public final class HologramController {
          double dy = end.y - start.y;
          double dz = end.z - start.z;
          return rayVsUnitCube(start, dx, dy, dz, x, y, z);
-      } else {
-         HologramPlacementContext.begin(world);
+      }
 
-         HitResult var15;
-         try {
-            return block.collisionRayTrace(world, x, y, z, start, end, true);
-         } catch (Throwable var19) {
-            double dx = end.x - start.x;
-            double dy = end.y - start.y;
-            double dz = end.z - start.z;
-            var15 = rayVsUnitCube(start, dx, dy, dz, x, y, z);
-         } finally {
-            HologramPlacementContext.end();
-         }
+      HologramPlacementContext.begin(world);
 
-         return var15;
+      try {
+         return block.collisionRayTrace(world, x, y, z, start, end, true);
+      } catch (Throwable t) {
+         double dx = end.x - start.x;
+         double dy = end.y - start.y;
+         double dz = end.z - start.z;
+         return rayVsUnitCube(start, dx, dy, dz, x, y, z);
+      } finally {
+         HologramPlacementContext.end();
       }
    }
 
    public static AABB getHologramSelectionBox(World world, int x, int y, int z) {
       if (world == null) {
          return null;
-      } else {
-         HologramBlock h = HologramStore.get(world, x, y, z);
-         if (h == null) {
-            return null;
-         } else {
-            Block<?> block = Blocks.blocksList[h.blockId];
-            if (block == null) {
-               return null;
-            } else {
-               HologramPlacementContext.begin(world);
+      }
 
-               Object var7;
-               try {
-                  return block.getSelectedBoundingBoxFromPool(world, x, y, z);
-               } catch (Throwable var11) {
-                  var7 = null;
-               } finally {
-                  HologramPlacementContext.end();
-               }
+      HologramBlock h = HologramStore.get(world, x, y, z);
+      if (h == null) {
+         return null;
+      }
 
-               return (AABB)var7;
-            }
-         }
+      Block<?> block = Blocks.blocksList[h.blockId];
+      if (block == null) {
+         return null;
+      }
+
+      HologramPlacementContext.begin(world);
+
+      try {
+         return block.getSelectedBoundingBoxFromPool(world, x, y, z);
+      } catch (Throwable t) {
+         return null;
+      } finally {
+         HologramPlacementContext.end();
       }
    }
 
@@ -480,52 +475,52 @@ public final class HologramController {
       }
 
       if (dy != 0.0) {
-         double t1x = (by - start.y) / dy;
-         double t2x = (by + 1.0 - start.y) / dy;
-         double nearx;
-         double farx;
-         if (t1x < t2x) {
-            nearx = t1x;
-            farx = t2x;
+         double t1 = (by - start.y) / dy;
+         double t2 = (by + 1.0 - start.y) / dy;
+         double near;
+         double far;
+         if (t1 < t2) {
+            near = t1;
+            far = t2;
          } else {
-            nearx = t2x;
-            farx = t1x;
+            near = t2;
+            far = t1;
          }
 
-         if (nearx > tMin) {
-            tMin = nearx;
+         if (near > tMin) {
+            tMin = near;
             enterAxis = 1;
             enterPositiveDir = dy > 0.0;
          }
 
-         if (farx < tMax) {
-            tMax = farx;
+         if (far < tMax) {
+            tMax = far;
          }
       } else if (start.y < by || start.y > by + 1.0) {
          return null;
       }
 
       if (dz != 0.0) {
-         double t1xx = (bz - start.z) / dz;
-         double t2xx = (bz + 1.0 - start.z) / dz;
-         double nearxx;
-         double farxx;
-         if (t1xx < t2xx) {
-            nearxx = t1xx;
-            farxx = t2xx;
+         double t1 = (bz - start.z) / dz;
+         double t2 = (bz + 1.0 - start.z) / dz;
+         double near;
+         double far;
+         if (t1 < t2) {
+            near = t1;
+            far = t2;
          } else {
-            nearxx = t2xx;
-            farxx = t1xx;
+            near = t2;
+            far = t1;
          }
 
-         if (nearxx > tMin) {
-            tMin = nearxx;
+         if (near > tMin) {
+            tMin = near;
             enterAxis = 2;
             enterPositiveDir = dz > 0.0;
          }
 
-         if (farxx < tMax) {
-            tMax = farxx;
+         if (far < tMax) {
+            tMax = far;
          }
       } else if (start.z < bz || start.z > bz + 1.0) {
          return null;
@@ -533,30 +528,32 @@ public final class HologramController {
 
       if (tMin > tMax || tMax < 0.0) {
          return null;
-      } else if (tMin < 0.0) {
+      }
+
+      if (tMin < 0.0) {
          Side side = inferSide(dx, dy, dz);
          return new HitResult(bx, by, bz, side, Vec3.getTempVec3(start.x, start.y, start.z));
-      } else {
-         double hx = start.x + dx * tMin;
-         double hy = start.y + dy * tMin;
-         double hz = start.z + dz * tMin;
-         Side side;
-         switch (enterAxis) {
-            case 0:
-               side = enterPositiveDir ? Side.WEST : Side.EAST;
-               break;
-            case 1:
-               side = enterPositiveDir ? Side.BOTTOM : Side.TOP;
-               break;
-            case 2:
-               side = enterPositiveDir ? Side.NORTH : Side.SOUTH;
-               break;
-            default:
-               side = inferSide(dx, dy, dz);
-         }
-
-         return new HitResult(bx, by, bz, side, Vec3.getTempVec3(hx, hy, hz));
       }
+
+      double hx = start.x + dx * tMin;
+      double hy = start.y + dy * tMin;
+      double hz = start.z + dz * tMin;
+      Side side;
+      switch (enterAxis) {
+         case 0:
+            side = enterPositiveDir ? Side.WEST : Side.EAST;
+            break;
+         case 1:
+            side = enterPositiveDir ? Side.BOTTOM : Side.TOP;
+            break;
+         case 2:
+            side = enterPositiveDir ? Side.NORTH : Side.SOUTH;
+            break;
+         default:
+            side = inferSide(dx, dy, dz);
+      }
+
+      return new HitResult(bx, by, bz, side, Vec3.getTempVec3(hx, hy, hz));
    }
 
    private static Side inferSide(double dx, double dy, double dz) {
@@ -569,6 +566,128 @@ public final class HologramController {
          return dx < 0.0 ? Side.EAST : Side.WEST;
       } else {
          return dz < 0.0 ? Side.SOUTH : Side.NORTH;
+      }
+   }
+
+   public static void pickHologramBlock(Player player, World world, HologramBlock h, int x, int y, int z) {
+      if (player != null && world != null && h != null) {
+         Block<?> block = Blocks.blocksList[h.blockId];
+         if (block != null) {
+            ItemStack[] result;
+            try {
+               result = block.getBreakResult(world, EnumDropCause.PICK_BLOCK, x, y, z, h.metadata, null);
+            } catch (Throwable t) {
+               return;
+            }
+
+            if (result != null && result.length != 0 && result[0] != null) {
+               ItemStack selectItem = result[0];
+               ContainerInventory inv = player.inventory;
+               int hotbarOffset = inv.getHotbarOffset();
+
+               for (int i = 0; i < 9; i++) {
+                  ItemStack s = inv.getItem(i + hotbarOffset);
+                  if (s != null && s.itemID == selectItem.itemID && s.getMetadata() == selectItem.getMetadata()) {
+                     player.setCurrentItem(i + hotbarOffset);
+                     return;
+                  }
+               }
+
+               int emptyHotbarSlot = -1;
+               int destSlot = inv.getCurrentItemIndex();
+
+               for (int i = 0; i < 9; i++) {
+                  if (inv.getItem(i + hotbarOffset) == null) {
+                     emptyHotbarSlot = i + hotbarOffset;
+                     destSlot = emptyHotbarSlot;
+                     break;
+                  }
+               }
+
+               int itemSlot = -1;
+               int stackSize = -1;
+
+               for (int i = 0; i < 36; i++) {
+                  ItemStack s = inv.getItem(i);
+                  if (s != null && s.itemID == selectItem.itemID && s.getMetadata() == selectItem.getMetadata() && (stackSize == -1 || s.stackSize < stackSize)
+                     )
+                   {
+                     itemSlot = i;
+                     stackSize = s.stackSize;
+                  }
+               }
+
+               if (itemSlot != -1) {
+                  player.swapItems(destSlot, itemSlot);
+                  player.setCurrentItem(destSlot);
+               } else {
+                  if (player.getGamemode() == Gamemode.creative) {
+                     int emptySlot = -1;
+
+                     for (int i = 0; i < 36; i++) {
+                        if (inv.getItem(i) == null) {
+                           emptySlot = i;
+                           break;
+                        }
+                     }
+
+                     int insert = emptyHotbarSlot != -1 ? emptyHotbarSlot : inv.getCurrentItemIndex();
+                     selectItem.stackSize = 1;
+                     if (emptySlot != -1) {
+                        player.swapItems(emptySlot, insert);
+                     }
+
+                     inv.setItem(insert, selectItem);
+                     player.setCurrentItem(insert);
+                  }
+               }
+            }
+         }
+      }
+   }
+
+   public static int pasteBlueprint(Minecraft mc) {
+      if (mc != null && mc.currentWorld != null) {
+         if (mc.isMultiplayerWorld()) {
+            return 0;
+         }
+
+         World world = mc.currentWorld;
+         if (!HologramStore.hasEntries(world)) {
+            return 0;
+         }
+
+         List<int[]> coords = new ArrayList<>();
+         HologramStore.forEach(world, (xx, yx, zx, h) -> coords.add(new int[]{xx, yx, zx, h.blockId, h.metadata}));
+         if (coords.isEmpty()) {
+            return 0;
+         }
+
+         coords.sort((a, b) -> Integer.compare(a[1], b[1]));
+         int placed = 0;
+
+         for (int[] c : coords) {
+            int x = c[0];
+            int y = c[1];
+            int z = c[2];
+            int id = c[3];
+            int meta = c[4];
+            if (y >= 0 && y < world.getHeightBlocks()) {
+               try {
+                  if (world.setBlockAndMetadataWithNotify(x, y, z, id, meta)) {
+                     placed++;
+                  }
+               } catch (Throwable var12) {
+               }
+
+               HologramStore.remove(world, x, y, z);
+            }
+         }
+
+         HologramStore.recomputeBounds(world);
+         return placed;
+      } else {
+         return 0;
       }
    }
 

@@ -19,7 +19,7 @@ public abstract class BlockModelBasketMixin {
             if (world.getTileEntity(x, y, z) == null) {
                return 0;
             }
-         } catch (Throwable var7) {
+         } catch (Throwable ignored) {
             return 0;
          }
 

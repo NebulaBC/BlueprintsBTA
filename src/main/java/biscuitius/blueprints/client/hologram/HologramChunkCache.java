@@ -48,20 +48,20 @@ public final class HologramChunkCache extends ChunkCache {
       HologramBlock h = this.visibleHologram(x, y, z);
       if (h == null) {
          return super.isBlockOpaqueCube(x, y, z);
-      } else {
-         Block<?> b = Blocks.blocksList[h.blockId];
-         return b != null && b.isSolidRender();
       }
+
+      Block<?> b = Blocks.blocksList[h.blockId];
+      return b != null && b.isSolidRender();
    }
 
    public boolean isBlockNormalCube(int x, int y, int z) {
       HologramBlock h = this.visibleHologram(x, y, z);
       if (h == null) {
          return super.isBlockNormalCube(x, y, z);
-      } else {
-         Block<?> b = Blocks.blocksList[h.blockId];
-         return b != null && b.getMaterial().blocksMotion() && b.isCubeShaped();
       }
+
+      Block<?> b = Blocks.blocksList[h.blockId];
+      return b != null && b.getMaterial().blocksMotion() && b.isCubeShaped();
    }
 
    public int getLightmapCoord(int x, int y, int z, int blockLightValue) {

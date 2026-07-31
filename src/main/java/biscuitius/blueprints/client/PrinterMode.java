@@ -114,14 +114,11 @@ public final class PrinterMode {
          inv.setCurrentItemIndex(invSlot, true);
          ItemStack held = inv.getCurrentItem();
 
-         boolean var23;
          try {
-            var23 = held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
+            return held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
          } finally {
             inv.setCurrentItemIndex(originalSelected, true);
          }
-
-         return var23;
       } else {
          int hotbarTarget = -1;
 
@@ -138,27 +135,24 @@ public final class PrinterMode {
 
          if (mc.playerController == null) {
             return false;
-         } else {
-            int containerId = player.inventorySlots.containerId;
-            int hotbarNumber = hotbarTarget + 1;
-            boolean swapped = false;
+         }
 
-            boolean var13;
-            try {
+         int containerId = player.inventorySlots.containerId;
+         int hotbarNumber = hotbarTarget + 1;
+         boolean swapped = false;
+
+         try {
+            mc.playerController.handleInventoryMouseClick(containerId, InventoryAction.HOTBAR_ITEM_SWAP, new int[]{invSlot, hotbarNumber}, player);
+            swapped = true;
+            inv.setCurrentItemIndex(hotbarTarget, true);
+            ItemStack held = inv.getCurrentItem();
+            return held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
+         } finally {
+            if (swapped) {
                mc.playerController.handleInventoryMouseClick(containerId, InventoryAction.HOTBAR_ITEM_SWAP, new int[]{invSlot, hotbarNumber}, player);
-               swapped = true;
-               inv.setCurrentItemIndex(hotbarTarget, true);
-               ItemStack held = inv.getCurrentItem();
-               var13 = held != null && HologramController.tryFulfill(mc, player, held, x, y, z);
-            } finally {
-               if (swapped) {
-                  mc.playerController.handleInventoryMouseClick(containerId, InventoryAction.HOTBAR_ITEM_SWAP, new int[]{invSlot, hotbarNumber}, player);
-               }
-
-               inv.setCurrentItemIndex(originalSelected, true);
             }
 
-            return var13;
+            inv.setCurrentItemIndex(originalSelected, true);
          }
       }
    }
@@ -167,37 +161,37 @@ public final class PrinterMode {
       Block<?> block = h.blockId > 0 && h.blockId < Blocks.blocksList.length ? Blocks.blocksList[h.blockId] : null;
       if (block == null) {
          return -1;
-      } else {
-         ItemStack want;
-         try {
-            ItemStack[] pick = block.getBreakResult(world, EnumDropCause.PICK_BLOCK, hx, hy, hz, h.metadata, null);
-            if (pick == null || pick.length == 0 || pick[0] == null) {
-               return -1;
-            }
+      }
 
-            want = pick[0];
-         } catch (Throwable var12) {
+      ItemStack want;
+      try {
+         ItemStack[] pick = block.getBreakResult(world, EnumDropCause.PICK_BLOCK, hx, hy, hz, h.metadata, null);
+         if (pick == null || pick.length == 0 || pick[0] == null) {
             return -1;
          }
 
-         int backpackMatch = -1;
-         int limit = Math.min(36, inv.mainInventory.length);
+         want = pick[0];
+      } catch (Throwable t) {
+         return -1;
+      }
 
-         for (int i = 0; i < limit; i++) {
-            ItemStack stack = inv.mainInventory[i];
-            if (stack != null && stack.itemID == want.itemID && stack.getMetadata() == want.getMetadata()) {
-               if (i <= 8) {
-                  return i;
-               }
+      int backpackMatch = -1;
+      int limit = Math.min(36, inv.mainInventory.length);
 
-               if (backpackMatch < 0) {
-                  backpackMatch = i;
-               }
+      for (int i = 0; i < limit; i++) {
+         ItemStack stack = inv.mainInventory[i];
+         if (stack != null && stack.itemID == want.itemID && stack.getMetadata() == want.getMetadata()) {
+            if (i <= 8) {
+               return i;
+            }
+
+            if (backpackMatch < 0) {
+               backpackMatch = i;
             }
          }
-
-         return backpackMatch;
       }
+
+      return backpackMatch;
    }
 
    private static void showMessage(String key, String fallback, int colour) {
