@@ -449,13 +449,16 @@ public final class HologramRenderer implements HologramListener {
                               break;
                            }
 
-                           try {
-                              if (!(block.entitySupplier.get() instanceof TileEntity)) {
-                                 continue;
-                              }
-                           } catch (Throwable t) {
-                              continue;
-                           }
+							try {
+								Object supplied = block.entitySupplier.get();
+								if (!(supplied instanceof TileEntity)) {
+									continue;
+								}
+
+								te = (TileEntity)supplied;
+							} catch (Throwable t) {
+								continue;
+							}
 
                            te.worldObj = world;
                            te.tilePos.x = x;
