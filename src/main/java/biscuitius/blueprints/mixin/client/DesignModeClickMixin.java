@@ -9,6 +9,7 @@ import biscuitius.blueprints.client.hologram.BlueprintTransform;
 import biscuitius.blueprints.client.hologram.HologramBlock;
 import biscuitius.blueprints.client.hologram.HologramController;
 import biscuitius.blueprints.client.hologram.HologramStore;
+import biscuitius.blueprints.client.hologram.HologramTileEntities;
 import biscuitius.blueprints.client.item.BlueprintItem;
 import biscuitius.blueprints.client.item.ClipboardToolItem;
 import biscuitius.blueprints.client.item.FillToolItem;
@@ -124,6 +125,22 @@ public abstract class DesignModeClickMixin {
                      ci.cancel();
                   } else if (clickType != 0) {
                      if (clickType == 1) {
+                        HologramBlock hostBlock = HologramStore.get(mc.currentWorld, x, y, z);
+                        if (!sneaking && hostBlock != null && HologramTileEntities.tryOpenEditor(mc.currentWorld, designPlayer, x, y, z, hostBlock)) {
+                           designPlayer.swingItem();
+                           ci.cancel();
+                           return;
+                        }
+
+                        if (HologramStore.get(mc.currentWorld, x, y, z) != null
+                           && HologramController.tryInteract(mc.currentWorld, designPlayer, x, y, z, side, xPlacedFor(side, hit, x, y, z), hit.location.y() - y)
+                           )
+                         {
+                           designPlayer.swingItem();
+                           ci.cancel();
+                           return;
+                        }
+
                         ItemStack stack = designPlayer.inventory.getCurrentItem();
                         if (stack == null) {
                            ci.cancel();
@@ -131,15 +148,7 @@ public abstract class DesignModeClickMixin {
                         }
 
                         double yPlaced = hit.location.y() - y;
-                        double xPlaced;
-                        if (side.axis() == Axis.X) {
-                           xPlaced = hit.location.x() - x;
-                        } else if (side.axis() == Axis.Z) {
-                           xPlaced = hit.location.z() - z;
-                        } else {
-                           xPlaced = hit.location.x() - x;
-                        }
-
+                        double xPlaced = xPlacedFor(side, hit, x, y, z);
                         if (HologramController.tryPlace(mc.currentWorld, designPlayer, stack, x, y, z, side, xPlaced, yPlaced)) {
                            designPlayer.swingItem();
                            DesignModeState.shuffleAndGetItem(designPlayer.inventory);
@@ -165,6 +174,14 @@ public abstract class DesignModeClickMixin {
                }
             }
          }
+      }
+   }
+
+   private static double xPlacedFor(Side side, HitResult hit, int x, int y, int z) {
+      if (side.axis() == Axis.X) {
+         return hit.location.x() - x;
+      } else {
+         return side.axis() == Axis.Z ? hit.location.z() - z : hit.location.x() - x;
       }
    }
 

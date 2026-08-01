@@ -1,24 +1,29 @@
 package biscuitius.blueprints.client.hologram;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import net.minecraft.core.world.World;
 
 public final class HologramPlacementContext {
    private static volatile HologramPlacementContext.Mode mode = HologramPlacementContext.Mode.NONE;
    private static volatile World activeWorld;
    private static final HashMap<Long, int[]> captureMap = new HashMap<>();
+   private static final HashSet<Long> touchedPositions = new HashSet<>();
 
    private HologramPlacementContext() {
    }
 
    public static void begin(World world) {
       activeWorld = world;
+      touchedPositions.clear();
       mode = HologramPlacementContext.Mode.NORMAL;
    }
 
    public static void beginDryRun(World world) {
       activeWorld = world;
       captureMap.clear();
+      touchedPositions.clear();
       mode = HologramPlacementContext.Mode.DRY_RUN;
    }
 
@@ -26,6 +31,7 @@ public final class HologramPlacementContext {
       mode = HologramPlacementContext.Mode.NONE;
       activeWorld = null;
       captureMap.clear();
+      touchedPositions.clear();
    }
 
    public static boolean isActive() {
@@ -54,6 +60,16 @@ public final class HologramPlacementContext {
 
    public static int[] captureRead(int x, int y, int z) {
       return captureMap.get(key(x, y, z));
+   }
+
+   public static void recordTouch(int x, int y, int z) {
+      if (mode == HologramPlacementContext.Mode.NORMAL) {
+         touchedPositions.add(key(x, y, z));
+      }
+   }
+
+   public static Set<Long> snapshotTouchedPositions() {
+      return new HashSet<>(touchedPositions);
    }
 
    private static long key(int x, int y, int z) {

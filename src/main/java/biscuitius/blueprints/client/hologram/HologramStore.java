@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import net.minecraft.core.block.Block;
+import net.minecraft.core.block.Blocks;
 import net.minecraft.core.world.World;
 
 public final class HologramStore {
@@ -17,6 +19,44 @@ public final class HologramStore {
    private static final Map<World, Map<Long, int[]>> SECTION_COUNTS = new IdentityHashMap<>();
    private static final Map<World, int[]> STICKY_BOUNDS = new IdentityHashMap<>();
    private static final List<HologramListener> LISTENERS = new ArrayList<>(2);
+
+   public static HologramBlock sanitize(HologramBlock block) {
+      if (block == null) {
+         return null;
+      }
+
+      int id = block.blockId;
+      if (id > 0 && id < Blocks.blocksList.length) {
+         Block<?> resolved = Blocks.blocksList[id];
+         if (resolved == null) {
+            return null;
+         }
+
+         if (resolved == Blocks.REPEATER_ACTIVE) {
+            id = Blocks.REPEATER_IDLE.id();
+         } else if (resolved == Blocks.TORCH_REDSTONE_ACTIVE) {
+            id = Blocks.TORCH_REDSTONE_IDLE.id();
+         } else if (resolved == Blocks.MATCHER_ACTIVE) {
+            id = Blocks.MATCHER.id();
+         } else if (resolved == Blocks.LAMP_ACTIVE) {
+            id = Blocks.LAMP_IDLE.id();
+         } else if (resolved == Blocks.LAMP_INVERTED_ACTIVE) {
+            id = Blocks.LAMP_INVERTED_IDLE.id();
+         } else if (resolved == Blocks.PUMPKIN_CARVED_ACTIVE) {
+            id = Blocks.PUMPKIN_CARVED_IDLE.id();
+         } else if (resolved == Blocks.PISTON_HEAD || resolved == Blocks.PISTON_HEAD_STEEL || resolved == Blocks.PISTON_MOVING) {
+            return null;
+         }
+
+         return id == block.blockId ? block : new HologramBlock(id, block.metadata, block.nbt);
+      } else {
+         return null;
+      }
+   }
+
+   public static HologramBlock sanitize(int blockId, int metadata) {
+      return sanitize(new HologramBlock(blockId, metadata));
+   }
 
    private HologramStore() {
    }
@@ -207,6 +247,21 @@ public final class HologramStore {
    }
 
    public static HologramBlock put(World world, int x, int y, int z, HologramBlock block) {
+      return putInternal(world, x, y, z, sanitize(block));
+   }
+
+   public static HologramBlock putRaw(World world, int x, int y, int z, HologramBlock block) {
+      if (block != null) {
+         int id = block.blockId;
+         if (id <= 0 || id >= Blocks.blocksList.length || Blocks.blocksList[id] == null) {
+            block = null;
+         }
+      }
+
+      return putInternal(world, x, y, z, block);
+   }
+
+   private static HologramBlock putInternal(World world, int x, int y, int z, HologramBlock block) {
       if (world == null || y < 0 || y >= 256) {
          return null;
       }

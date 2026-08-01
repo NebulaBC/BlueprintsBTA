@@ -34,6 +34,7 @@ public final class ScreenDesignTools extends Screen {
    private SliderElement colourSlider;
    private SliderElement opacitySlider;
    private SliderElement saturationSlider;
+   private ButtonElement hideButton;
    private float prevHue;
    private float prevOpacity;
    private float prevSaturation;
@@ -69,7 +70,8 @@ public final class ScreenDesignTools extends Screen {
       int midCol3 = leftCol + 77 + 4;
       int rightCol3 = midCol3 + 77 + 4;
       this.buttons.add(new ButtonElement(0, leftCol, top, 77, 20, "Clear"));
-      this.buttons.add(new ButtonElement(1, midCol3, top, 77, 20, HologramAppearance.isHidden() ? "Show" : "Hide"));
+      this.hideButton = new ButtonElement(1, midCol3, top, 77, 20, HologramAppearance.isHidden() ? "Show" : "Hide");
+      this.buttons.add(this.hideButton);
       this.buttons.add(new ButtonElement(19, rightCol3, top, 77, 20, "Materials"));
       top += 24;
       this.buttons.add(new ButtonElement(8, leftCol, top, 118, 20, "Save Blueprint"));
@@ -152,6 +154,10 @@ public final class ScreenDesignTools extends Screen {
    public void tick() {
       Minecraft mc = Minecraft.getMinecraft();
       if (mc != null && mc.currentWorld != null) {
+         if (this.hideButton != null) {
+            this.hideButton.displayString = HologramAppearance.isHidden() ? "Show" : "Hide";
+         }
+
          if (this.layersSlider != null) {
             int totalLayers = getTotalLayers(mc.currentWorld);
             if (totalLayers <= 1) {

@@ -7,7 +7,14 @@ import net.minecraft.client.entity.player.PlayerLocalMultiplayer;
 import net.minecraft.client.net.handler.PacketHandlerClient;
 import net.minecraft.core.block.Block;
 import net.minecraft.core.block.BlockLogicBed;
+import net.minecraft.core.block.BlockLogicConduit;
 import net.minecraft.core.block.BlockLogicDoor;
+import net.minecraft.core.block.BlockLogicFenceGate;
+import net.minecraft.core.block.BlockLogicFire;
+import net.minecraft.core.block.BlockLogicLamp;
+import net.minecraft.core.block.BlockLogicRepeater;
+import net.minecraft.core.block.BlockLogicTimer;
+import net.minecraft.core.block.BlockLogicTrapDoor;
 import net.minecraft.core.block.Blocks;
 import net.minecraft.core.entity.player.Player;
 import net.minecraft.core.enums.EnumDropCause;
@@ -50,10 +57,15 @@ public final class HologramController {
             return false;
          }
 
+         if (item instanceof ItemFireStriker && !isLegalFireStrike(world, x, y, z, side)) {
+            return false;
+         }
+
+         boolean placed = false;
          HologramPlacementContext.begin(world);
 
          try {
-            return item.onUseItemOnBlock(stack, player, world, x, y, z, side, xHit, yHit);
+            placed = item.onUseItemOnBlock(stack, player, world, x, y, z, side, xHit, yHit);
          } catch (Throwable t) {
             if (item instanceof ItemBlock) {
                Block<?> block = ((ItemBlock)item).getBlock();
@@ -69,15 +81,70 @@ public final class HologramController {
 
                   if (ty >= 0 && ty < world.getHeightBlocks() && isReplaceable(world, tx, ty, tz)) {
                      HologramStore.put(world, tx, ty, tz, new HologramBlock(block.id(), stack.getMetadata()));
-                     return true;
+                     HologramPlacementContext.recordTouch(tx, ty, tz);
+                     placed = true;
                   }
                }
             }
-
-            return false;
          } finally {
             HologramPlacementContext.end();
          }
+
+         return placed;
+      } else {
+         return false;
+      }
+   }
+
+   public static boolean tryInteract(World world, Player player, int x, int y, int z, Side side, double xHit, double yHit) {
+      if (world != null && player != null) {
+         HologramBlock state = HologramStore.get(world, x, y, z);
+         if (state == null) {
+            return false;
+         } else {
+            Block<?> block = state.blockId > 0 && state.blockId < Blocks.blocksList.length ? Blocks.blocksList[state.blockId] : null;
+            if (block != null && isManuallyToggleable(block)) {
+               Boolean result = HologramSimulationContext.call(world, () -> {
+                  try {
+                     return block.onBlockRightClicked(world, x, y, z, player, side, xHit, yHit);
+                  } catch (Throwable t) {
+                     return false;
+                  }
+               });
+               return Boolean.TRUE.equals(result);
+            } else {
+               return false;
+            }
+         }
+      } else {
+         return false;
+      }
+   }
+
+   private static boolean isManuallyToggleable(Block<?> block) {
+      Object logic = block.getLogic();
+      return logic instanceof BlockLogicDoor
+         || logic instanceof BlockLogicTrapDoor
+         || logic instanceof BlockLogicFenceGate
+         || logic instanceof BlockLogicLamp
+         || logic instanceof BlockLogicRepeater
+         || logic instanceof BlockLogicTimer
+         || logic instanceof BlockLogicConduit;
+   }
+
+   private static boolean isLegalFireStrike(World world, int x, int y, int z, Side side) {
+      int fx = x + side.offsetX();
+      int fy = y + side.offsetY();
+      int fz = z + side.offsetZ();
+      if (Blocks.FIRE.getLogic() instanceof BlockLogicFire fire) {
+         Boolean ok = HologramSimulationContext.call(world, () -> {
+            try {
+               return fire.canPlaceAt(world, new TilePos(fx, fy, fz));
+            } catch (Throwable t) {
+               return false;
+            }
+         });
+         return Boolean.TRUE.equals(ok);
       } else {
          return false;
       }

@@ -71,7 +71,7 @@ public final class UpdateChecker {
          }
 
          int[] installedMod = parseParts(modPart(installed));
-         int[] runningBta = parseParts("8.0");
+         int[] runningBta = parseParts("8.0.1");
          String json = fetch("https://api.modrinth.com/v2/project/blueprints-bta/version");
          if (json == null) {
             return;

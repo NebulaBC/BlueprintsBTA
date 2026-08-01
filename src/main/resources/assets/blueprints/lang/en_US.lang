@@ -1,10 +1,13 @@
 key.blueprints.design_mode=Toggle Design Mode
 key.blueprints.design_tools=Blueprints Menu
 key.blueprints.shuffle=Toggle Shuffle
+key.blueprints.toggle_visibility=Show/Hide Blueprint
 blueprints.design_mode.enabled=Entered Design Mode
 blueprints.design_mode.disabled=Exited Design Mode
 blueprints.shuffle.enabled=Shuffle enabled
 blueprints.shuffle.disabled=Shuffle disabled
+blueprints.blueprint.shown=Blueprint shown
+blueprints.blueprint.hidden=Blueprint hidden
 blueprints.printer_mode.enabled=Printer Mode enabled
 blueprints.printer_mode.disabled=Printer Mode disabled
 blueprints.printer_mode.blocked_design=Printer Mode unavailable in Design Mode

@@ -7,10 +7,12 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Map.Entry;
 import net.minecraft.client.render.TileEntityRenderDispatcher;
 import net.minecraft.client.render.block.model.BlockModel;
@@ -33,14 +35,17 @@ import net.minecraft.core.world.chunk.ChunkCache;
 import net.minecraft.core.world.pos.TilePos;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL41;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class HologramRenderer implements HologramListener {
+   private static final Logger LOGGER = LoggerFactory.getLogger("blueprints-client");
    public static final int RENDER_PASS_SOLID = 0;
    public static final int RENDER_PASS_TRANSLUCENT = 1;
    public static final int RENDER_PASS_WRONG = 2;
    private static final int RENDER_PASSES = 3;
    private static final int MAX_REBUILDS_PER_FRAME = 8;
+   private static final float HOLOGRAM_ALPHA_TEST = 0.1F;
    public static volatile boolean HOLOGRAM_PASS_ACTIVE;
    public static volatile boolean WRONG_BLOCK_PASS_ACTIVE;
    public static volatile boolean PREVIEW_PASS_ACTIVE;
@@ -322,7 +327,7 @@ public final class HologramRenderer implements HologramListener {
                GLRenderer.enableState(State.BLEND);
                GLRenderer.setBlendFunc(BlendFactor.SRC_ALPHA, BlendFactor.ONE_MINUS_SRC_ALPHA);
                GLRenderer.setDepthMask(renderPass == 0);
-               GLRenderer.setAlphaTest(0.0F);
+               GLRenderer.setAlphaTest(0.1F);
                if (DesignModeState.isActive()) {
                   GLRenderer.setColor4f(1.0F, 1.0F, 1.0F, 1.0F);
                } else {
@@ -375,7 +380,7 @@ public final class HologramRenderer implements HologramListener {
          GLRenderer.enableState(State.POLYGON_OFFSET_FILL);
          GLRenderer.setPolygonOffset(-1.0F, -1.0F);
          GLRenderer.setDepthMask(false);
-         GLRenderer.setAlphaTest(0.0F);
+         GLRenderer.setAlphaTest(0.1F);
          GLRenderer.setColor4f(1.0F, 0.19F, 0.19F, 0.75F);
          GLRenderer.modelM4f().translate((float)(-cameraX), (float)(-cameraY), (float)(-cameraZ));
          WRONG_BLOCK_PASS_ACTIVE = true;
@@ -427,7 +432,7 @@ public final class HologramRenderer implements HologramListener {
             Iterator var8 = worldBlocks.entrySet().iterator();
 
             while (true) {
-		   	   TileEntity te;
+					TileEntity te;
                while (true) {
                   if (!var8.hasNext()) {
                      return;
@@ -449,21 +454,22 @@ public final class HologramRenderer implements HologramListener {
                               break;
                            }
 
-							try {
-								Object supplied = block.entitySupplier.get();
-								if (!(supplied instanceof TileEntity)) {
-									continue;
-								}
+                           te = HologramTileEntities.instantiate(x, y, z, h);
+                           if (te == null) {
+                              try {
+                                 if (!(block.entitySupplier.get() instanceof TileEntity)) {
+                                    continue;
+                                 }
 
-								te = (TileEntity)supplied;
-							} catch (Throwable t) {
-								continue;
-							}
+                                 te.tilePos.x = x;
+                                 te.tilePos.y = y;
+                                 te.tilePos.z = z;
+                              } catch (Throwable t) {
+                                 continue;
+                              }
+                           }
 
                            te.worldObj = world;
-                           te.tilePos.x = x;
-                           te.tilePos.y = y;
-                           te.tilePos.z = z;
                            cache.put(key, te);
                            break;
                         }
@@ -476,7 +482,16 @@ public final class HologramRenderer implements HologramListener {
                   GLRenderer.pushFrame();
 
                   try {
-                     dispatcher.renderTileEntity(tess, camera, world, te, partialTick);
+                     GLRenderer.setLightmapCoord2i(15, 15);
+                     GLRenderer.setColor3f(1.0F, 1.0F, 1.0F);
+                     dispatcher.renderTileEntity(
+                        tess,
+                        te,
+                        te.tilePos.x - TileEntityRenderDispatcher.renderPosX,
+                        te.tilePos.y - TileEntityRenderDispatcher.renderPosY,
+                        te.tilePos.z - TileEntityRenderDispatcher.renderPosZ,
+                        partialTick
+                     );
                   } catch (Throwable var24) {
                   } finally {
                      GLRenderer.popFrame();
@@ -686,6 +701,28 @@ public final class HologramRenderer implements HologramListener {
       t.addVertex(x0, y0, z1);
    }
 
+   private static void seedBlockRenderState(TessellatorShader tess) {
+      tess.setLightmapCoord2i(15, 15);
+      tess.setColor4i(255, 255, 255, 255);
+      tess.setTextureUV(0.0, 0.0);
+      tess.setShade1i(255);
+      tess.setNormal(0.0F, 1.0F, 0.0F);
+   }
+
+   private static boolean blueprints$isTessellatorStateFailure(Throwable t) {
+      if (!(t instanceof IllegalStateException)) {
+         return false;
+      }
+
+      String message = t.getMessage();
+      if (message == null) {
+         return false;
+      }
+
+      String lower = message.toLowerCase();
+      return lower.contains("disabled") || lower.contains("not drawing") || lower.contains("already drawing");
+   }
+
    private void flushDirty() {
       if (!this.dirtyQueue.isEmpty()) {
          int budget = 8;
@@ -725,6 +762,7 @@ public final class HologramRenderer implements HologramListener {
          this.sections.get(s.world).remove(s.key());
       } else {
          List<long[]> entries = new ArrayList<>();
+         Set<Long> corruptEntries = null;
          int maxBaseX = baseX + 16;
          int maxBaseY = Math.min(256, baseY + 16);
          int maxBaseZ = baseZ + 16;
@@ -736,20 +774,24 @@ public final class HologramRenderer implements HologramListener {
             int z = HologramStore.unpackZ(key);
             if (x >= baseX && x < maxBaseX && y >= baseY && y < maxBaseY && z >= baseZ && z < maxBaseZ && HologramAppearance.isYVisible(y)) {
                HologramBlock h = e.getValue();
-               int realId = s.world.getBlockId(x, y, z);
-               int realMeta = s.world.getBlockMetadata(x, y, z);
-               int mode;
-               if (realId == 0) {
-                  mode = 0;
-               } else if (realId == h.blockId && realMeta == h.metadata) {
-                  mode = 3;
-               } else {
-                  Block<?> realBlock = realId < Blocks.blocksList.length ? Blocks.blocksList[realId] : null;
-                  boolean replaceable = realBlock != null && realBlock.getMaterial().isReplaceable();
-                  mode = replaceable ? 2 : 1;
-               }
+               if (h != null && h.blockId > 0 && h.blockId < Blocks.blocksList.length && Blocks.blocksList[h.blockId] != null) {
+                  int realId = s.world.getBlockId(x, y, z);
+                  int realMeta = s.world.getBlockMetadata(x, y, z);
+                  int mode;
+                  if (realId == 0) {
+                     mode = 0;
+                  } else if (realId == h.blockId && realMeta == h.metadata) {
+                     mode = 3;
+                  } else {
+                     Block<?> realBlock = realId < Blocks.blocksList.length ? Blocks.blocksList[realId] : null;
+                     boolean replaceable = realBlock != null && realBlock.getMaterial().isReplaceable();
+                     mode = replaceable ? 2 : 1;
+                  }
 
-               entries.add(new long[]{x, y, z, h.blockId, h.metadata, mode, realId, realMeta});
+                  entries.add(new long[]{x, y, z, h.blockId, h.metadata, mode, realId, realMeta});
+               } else {
+                  corruptEntries = blueprints$markCorruptEntry(corruptEntries, s.world, x, y, z, h, null);
+               }
             }
          }
 
@@ -759,17 +801,16 @@ public final class HologramRenderer implements HologramListener {
             s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16
          );
          TessellatorShader tess = GLRenderer.getTessellator();
+         RenderBuffer[] rebuiltBuffers = new RenderBuffer[3];
+         boolean fatalTessellatorFailure = false;
+         Throwable fatalFailure = null;
          HOLOGRAM_PASS_ACTIVE = true;
 
          try {
             for (int pass = 0; pass < 2; pass++) {
-               if (s.buffers[pass] != null) {
-                  s.buffers[pass].delete();
-                  s.buffers[pass] = null;
-               }
-
                boolean anyRendered = false;
                tess.startDrawingQuads();
+               seedBlockRenderState(tess);
 
                for (long[] entry : entries) {
                   int mode = (int)entry[5];
@@ -777,17 +818,42 @@ public final class HologramRenderer implements HologramListener {
                      int blockId = (int)entry[3];
                      if (blockId > 0 && blockId < Blocks.blocksList.length) {
                         Block<?> block = Blocks.blocksList[blockId];
-                        if (block != null) {
+                        if (block == null) {
+                           corruptEntries = blueprints$markCorruptEntry(
+                              corruptEntries, s.world, (int)entry[0], (int)entry[1], (int)entry[2], new HologramBlock(blockId, (int)entry[4]), null
+                           );
+                        } else {
                            BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
-                           if (model != null && model.renderLayer() == pass) {
+                           if (model.renderLayer() == pass) {
+                              seedBlockRenderState(tess);
                               this.scratchPos.x = (int)entry[0];
                               this.scratchPos.y = (int)entry[1];
                               this.scratchPos.z = (int)entry[2];
-                              anyRendered |= model.render(tess, cache, this.scratchPos);
+
+                              try {
+                                 anyRendered |= model.render(tess, cache, this.scratchPos);
+                              } catch (Throwable t) {
+                                 if (blueprints$isTessellatorStateFailure(t)) {
+                                    fatalTessellatorFailure = true;
+                                    fatalFailure = t;
+                                    break;
+                                 }
+
+                                 LOGGER.warn(
+                                    "Skipping hologram render at ({}, {}, {}) state={} after non-fatal model render failure: {}",
+                                    new Object[]{
+                                       this.scratchPos.x, this.scratchPos.y, this.scratchPos.z, new HologramBlock(blockId, (int)entry[4]), t.toString()
+                                    }
+                                 );
+                              }
                            }
                         }
                      }
                   }
+               }
+
+               if (fatalTessellatorFailure) {
+                  break;
                }
 
                if (vertsPerPass != null) {
@@ -796,7 +862,7 @@ public final class HologramRenderer implements HologramListener {
                }
 
                if (anyRendered) {
-                  s.buffers[pass] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
+                  rebuiltBuffers[pass] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
                } else {
                   tess.draw();
                }
@@ -805,66 +871,156 @@ public final class HologramRenderer implements HologramListener {
             HOLOGRAM_PASS_ACTIVE = false;
          }
 
-         if (s.buffers[2] != null) {
-            s.buffers[2].delete();
-            s.buffers[2] = null;
-         }
-
-         boolean anyWrong = false;
-
-         for (long[] entry : entries) {
-            int mode = (int)entry[5];
-            if (mode == 1 || mode == 2) {
-               anyWrong = true;
-               break;
+         if (fatalTessellatorFailure) {
+            if (tess.drawing) {
+               try {
+                  tess.draw();
+               } catch (Throwable var40) {
+               }
             }
-         }
 
-         if (anyWrong) {
-            ChunkCache realCache = new ChunkCache(s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16);
-            WRONG_BLOCK_PASS_ACTIVE = true;
+            for (int pass = 0; pass < 3; pass++) {
+               if (rebuiltBuffers[pass] != null) {
+                  rebuiltBuffers[pass].delete();
+                  rebuiltBuffers[pass] = null;
+               }
+            }
 
-            try {
-               tess.startDrawingQuads();
-               boolean wroteAny = false;
+            LOGGER.warn(
+               "Deferred hologram section rebuild at ({}, {}, {}) after tessellator state failure: {}",
+               new Object[]{baseX, baseY, baseZ, fatalFailure == null ? "unknown" : fatalFailure.toString()}
+            );
+         } else {
+            boolean anyWrong = false;
 
-               for (long[] entry : entries) {
-                  int mode = (int)entry[5];
-                  if (mode == 1 || mode == 2) {
-                     int realId = (int)entry[6];
-                     if (realId > 0 && realId < Blocks.blocksList.length) {
-                        Block<?> block = Blocks.blocksList[realId];
-                        if (block != null) {
-                           BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
-                           if (model != null) {
+            for (long[] entry : entries) {
+               int mode = (int)entry[5];
+               if (mode == 1 || mode == 2) {
+                  anyWrong = true;
+                  break;
+               }
+            }
+
+            if (anyWrong) {
+               ChunkCache realCache = new ChunkCache(s.world, baseX - 1, Math.max(0, baseY - 1), baseZ - 1, baseX + 16, Math.min(255, baseY + 16), baseZ + 16);
+               WRONG_BLOCK_PASS_ACTIVE = true;
+
+               try {
+                  tess.startDrawingQuads();
+                  seedBlockRenderState(tess);
+                  boolean wroteAny = false;
+
+                  for (long[] entry : entries) {
+                     int mode = (int)entry[5];
+                     if (mode == 1 || mode == 2) {
+                        int realId = (int)entry[6];
+                        if (realId > 0 && realId < Blocks.blocksList.length) {
+                           Block<?> block = Blocks.blocksList[realId];
+                           if (block != null) {
+                              BlockModel<?> model = (BlockModel<?>)BlockModelDispatcher.getInstance().getDispatch(block);
                               this.scratchPos.x = (int)entry[0];
                               this.scratchPos.y = (int)entry[1];
                               this.scratchPos.z = (int)entry[2];
-                              wroteAny |= model.render(tess, realCache, this.scratchPos);
+
+                              try {
+                                 seedBlockRenderState(tess);
+                                 wroteAny |= model.render(tess, realCache, this.scratchPos);
+                              } catch (Throwable t) {
+                                 if (blueprints$isTessellatorStateFailure(t)) {
+                                    fatalTessellatorFailure = true;
+                                    fatalFailure = t;
+                                    break;
+                                 }
+
+                                 LOGGER.warn(
+                                    "Skipping wrong-block overlay render at ({}, {}, {}) realBlockId={} after non-fatal model render failure: {}",
+                                    new Object[]{this.scratchPos.x, this.scratchPos.y, this.scratchPos.z, realId, t.toString()}
+                                 );
+                              }
                            }
                         }
                      }
                   }
-               }
 
-               if (vertsPerPass != null) {
-                  vertsPerPass[2] = tess.vertexCount;
-                  anyRenderedPerPass[2] = wroteAny;
-               }
+                  if (fatalTessellatorFailure) {
+                     if (tess.drawing) {
+                        try {
+                           tess.draw();
+                        } catch (Throwable var41) {
+                        }
+                     }
 
-               if (wroteAny) {
-                  s.buffers[2] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
-               } else {
-                  tess.draw();
+                     for (int pass = 0; pass < 3; pass++) {
+                        if (rebuiltBuffers[pass] != null) {
+                           rebuiltBuffers[pass].delete();
+                           rebuiltBuffers[pass] = null;
+                        }
+                     }
+
+                     LOGGER.warn(
+                        "Deferred hologram section rebuild at ({}, {}, {}) after wrong-pass tessellator state failure: {}",
+                        new Object[]{baseX, baseY, baseZ, fatalFailure == null ? "unknown" : fatalFailure.toString()}
+                     );
+                     return;
+                  }
+
+                  if (vertsPerPass != null) {
+                     vertsPerPass[2] = tess.vertexCount;
+                     anyRenderedPerPass[2] = wroteAny;
+                  }
+
+                  if (wroteAny) {
+                     rebuiltBuffers[2] = tess.record(GL41.glGenVertexArrays(), GL41.glGenBuffers());
+                  } else {
+                     tess.draw();
+                  }
+               } finally {
+                  WRONG_BLOCK_PASS_ACTIVE = false;
                }
-            } finally {
-               WRONG_BLOCK_PASS_ACTIVE = false;
             }
+
+            for (int pass = 0; pass < 3; pass++) {
+               if (s.buffers[pass] != null) {
+                  s.buffers[pass].delete();
+               }
+
+               s.buffers[pass] = rebuiltBuffers[pass];
+            }
+
+            if (vertsPerPass != null) {
+               logFirstRebuildOnce(vertsPerPass, anyRenderedPerPass);
+            }
+
+            blueprints$pruneCorruptEntries(s.world, corruptEntries);
+         }
+      }
+   }
+
+   private static Set<Long> blueprints$markCorruptEntry(Set<Long> corruptEntries, World world, int x, int y, int z, HologramBlock block, Throwable t) {
+      if (corruptEntries == null) {
+         corruptEntries = new HashSet<>();
+      }
+
+      long packed = HologramStore.packPos(x, y, z);
+      if (corruptEntries.add(packed)) {
+         if (t != null) {
+            LOGGER.warn("Pruning corrupt hologram at ({}, {}, {}) state={} after render failure: {}", new Object[]{x, y, z, block, t.toString()});
+         } else {
+            LOGGER.warn("Pruning invalid hologram at ({}, {}, {}) state={}", new Object[]{x, y, z, block});
+         }
+      }
+
+      return corruptEntries;
+   }
+
+   private static void blueprints$pruneCorruptEntries(World world, Set<Long> corruptEntries) {
+      if (world != null && corruptEntries != null && !corruptEntries.isEmpty()) {
+         for (long packed : corruptEntries) {
+            HologramStore.remove(world, HologramStore.unpackX(packed), HologramStore.unpackY(packed), HologramStore.unpackZ(packed));
          }
 
-         if (vertsPerPass != null) {
-            logFirstRebuildOnce(vertsPerPass, anyRenderedPerPass);
-         }
+         HologramStore.recomputeBounds(world);
+         LOGGER.warn("Removed {} corrupt hologram block(s) from the active blueprint to keep the world loadable.", corruptEntries.size());
       }
    }
 

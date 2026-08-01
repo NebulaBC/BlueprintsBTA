@@ -6,7 +6,7 @@ loom = "1.15-SNAPSHOT"
 ##########################################################################
 # Java Configuration
 # The Java version the JDK will be for compiling and running code.
-java = "17"
+java = "21"
 # The Java version the JDK will be for running Gradle.
 gradleJava = "21"
 ##########################################################################EEE

@@ -33,6 +33,7 @@
     "TessellatorTintMixin",
     "DesignModeClickMixin",
     "DesignModeRaytraceMixin",
+    "ScreenSignEditorMixin",
     "WorldDesignPlacementMixin",
     "ChunkDesignPlacementMixin",
     "WorldClientMPDesignMixin",

@@ -158,6 +158,8 @@ public final class HologramCache implements HologramListener {
                } else {
                   int count = in.readInt();
                   if (count >= 0 && count <= 16000000) {
+                     int sanitizedEntries = 0;
+
                      for (int i = 0; i < count; i++) {
                         int x = in.readInt();
                         int y = in.readInt();
@@ -165,13 +167,32 @@ public final class HologramCache implements HologramListener {
                         int blockId = in.readShort() & '\uffff';
                         int meta = in.readShort() & '\uffff';
                         if (y >= 0 && y < 256) {
-                           HologramStore.put(world, x, y, z, new HologramBlock(blockId, meta));
+                           HologramBlock block = HologramStore.sanitize(blockId, meta);
+                           if (block == null) {
+                              sanitizedEntries++;
+                           } else {
+                              if (block.blockId != blockId || block.metadata != meta) {
+                                 sanitizedEntries++;
+                              }
+
+                              HologramStore.put(world, x, y, z, block);
+                           }
+                        } else {
+                           sanitizedEntries++;
                         }
                      }
 
                      HologramStore.recomputeBounds(world);
                      this.scopeAtFirstWrite.put(world, scope);
-                     this.dirty.remove(world);
+                     if (sanitizedEntries > 0) {
+                        LOGGER.warn(
+                           "Cleaned {} invalid/transient hologram cache entr{} while loading {}",
+                           new Object[]{sanitizedEntries, sanitizedEntries == 1 ? "y" : "ies", file}
+                        );
+                        this.dirty.put(world, Boolean.TRUE);
+                     } else {
+                        this.dirty.remove(world);
+                     }
                   }
                }
             }

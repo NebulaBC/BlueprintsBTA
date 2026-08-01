@@ -26,8 +26,9 @@ import org.lwjgl.input.Keyboard;
 
 public final class DesignModeState {
    public static final KeyBinding TOGGLE_KEY = new KeyBinding("key.blueprints.design_mode").setDefault(InputDevice.keyboard, Keyboard.KEY_V);
-   public static final KeyBinding MENU_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
-   public static final KeyBinding SHUFFLE_KEY = new KeyBinding("key.blueprints.shuffle").setDefault(InputDevice.keyboard, Keyboard.KEY_H);
+   public static final KeyBinding MENU_KEY = new KeyBinding("key.blueprints.design_tools").setDefault(InputDevice.keyboard, Keyboard.KEY_B);
+   public static final KeyBinding SHUFFLE_KEY = new KeyBinding("key.blueprints.shuffle").setDefault(InputDevice.keyboard, Keyboard.KEY_G);
+   public static final KeyBinding VISIBILITY_KEY = new KeyBinding("key.blueprints.toggle_visibility").setDefault(InputDevice.keyboard, Keyboard.KEY_H);
    private static volatile boolean active;
    private static boolean shuffleEnabled;
    private static boolean passthroughMode;
@@ -158,7 +159,17 @@ public final class DesignModeState {
          if (active && SHUFFLE_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
             toggleShuffle(minecraft);
          }
+
+         if (VISIBILITY_KEY.isPressEvent(InputDevice.keyboard) && Keyboard.getEventKeyState()) {
+            toggleBlueprintVisibility(minecraft);
+         }
       }
+   }
+
+   public static void toggleBlueprintVisibility(Minecraft minecraft) {
+      boolean nowHidden = !HologramAppearance.isHidden();
+      HologramAppearance.setHidden(nowHidden);
+      showVisibilityMessage(minecraft, nowHidden);
    }
 
    public static void handleDamageExit(Minecraft minecraft) {
@@ -341,6 +352,16 @@ public final class DesignModeState {
             ? i18n.translateKey(shuffleEnabled ? "blueprints.shuffle.enabled" : "blueprints.shuffle.disabled")
             : (shuffleEnabled ? "Shuffle enabled" : "Shuffle disabled");
          DesignModeOverlay.show(message, shuffleEnabled ? 5635925 : 16733525);
+      }
+   }
+
+   private static void showVisibilityMessage(Minecraft minecraft, boolean hidden) {
+      if (minecraft != null) {
+         I18n i18n = I18n.getInstance();
+         String message = i18n != null
+            ? i18n.translateKey(hidden ? "blueprints.blueprint.hidden" : "blueprints.blueprint.shown")
+            : (hidden ? "Blueprint hidden" : "Blueprint shown");
+         DesignModeOverlay.show(message, hidden ? 16733525 : 5635925);
       }
    }
 }

@@ -1,6 +1,5 @@
 package biscuitius.blueprints.client;
 
-import java.io.File;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ButtonElement;
@@ -192,8 +191,7 @@ public final class ScreenBlueprintBrowser extends Screen {
                this.statusColour = 16733525;
                this.updateDeleteButton();
             } else {
-               File file = BlueprintIO.resolveFile(name);
-               boolean ok = file != null && file.isFile() && file.delete();
+               boolean ok = BlueprintIO.delete(name);
                this.confirmingDelete = false;
                this.updateDeleteButton();
                this.updateActionButton();
@@ -249,7 +247,7 @@ public final class ScreenBlueprintBrowser extends Screen {
       if (this.statusLine != null) {
          this.drawStringCenteredShadow(this.fontRenderer, this.statusLine, this.width / 2, this.height - 54, this.statusColour);
       } else {
-         this.drawStringCenteredShadow(this.fontRenderer, "Saved to .minecraft/blueprints/", this.width / 2, this.height - 54, 8947848);
+         this.drawStringCenteredShadow(this.fontRenderer, "Saved to .minecraft/blueprints/ (.blueprint)", this.width / 2, this.height - 54, 8947848);
       }
 
       if (this.nameField != null) {

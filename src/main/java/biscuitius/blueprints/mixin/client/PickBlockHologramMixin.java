@@ -29,7 +29,7 @@ public abstract class PickBlockHologramMixin {
                float partial = timer != null ? timer.partialTicks : 1.0F;
                HitResult realHit = player.rayCast(256.0, partial, false, false, true);
                double reach = 256.0;
-               Vector3dc camPos = player.getPosition(partial, false);
+               Vector3dc camPos = player.getPosition(partial, true);
                Vector3dc look = player.getViewVector(partial);
                Vector3dc start = new Vector3d(camPos);
                Vector3dc end = new Vector3d(camPos).add(look.x() * reach, look.y() * reach, look.z() * reach);

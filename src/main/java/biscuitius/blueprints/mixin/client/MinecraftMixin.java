@@ -6,6 +6,7 @@ import biscuitius.blueprints.client.PrinterMode;
 import biscuitius.blueprints.client.ScreenDesignTools;
 import biscuitius.blueprints.client.UpdateChecker;
 import biscuitius.blueprints.client.hologram.HologramCache;
+import biscuitius.blueprints.client.hologram.HologramTileEntities;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.player.PlayerLocal;
 import net.minecraft.client.gui.Screen;
@@ -174,6 +175,11 @@ public abstract class MinecraftMixin {
 
    @Inject(method = "displayScreen", at = @At("HEAD"))
    private void blueprints$clearMovementOnScreenOpen(Screen screen, CallbackInfo ci) {
+      Minecraft mc = (Minecraft)(Object)this;
+      if (HologramTileEntities.hasOpenSession() && HologramTileEntities.isSessionScreen(mc.currentScreen)) {
+         HologramTileEntities.flushOpenSession();
+      }
+
       if (screen != null && DesignModeState.isActive()) {
          PlayerLocal dp = DesignModeState.getDesignPlayer();
          if (dp != null) {
